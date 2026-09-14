@@ -1,0 +1,7 @@
+requests
+beautifulsoup4
+duckdb
+pyarrow
+boto3
+python-dotenv
+pytest
