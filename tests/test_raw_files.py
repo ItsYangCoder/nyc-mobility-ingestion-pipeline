@@ -1,4 +1,3 @@
-```python
 """
 Local raw-data acquisition and verification checks.
 
@@ -33,7 +32,7 @@ GREEN_TAXI_FILES = {
 
 WEATHER_FILE = RAW_DIR / "weather_2026.json"
 
-TAXI_ZONES_FILE = RAW_DIR / "taxi_zones.csv"
+TAXI_ZONES_FILE = RAW_DIR / "taxi_zones" / "taxi_zone_lookup.csv"
 
 
 # ---------------------------------------------------------------------
@@ -278,4 +277,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-```
