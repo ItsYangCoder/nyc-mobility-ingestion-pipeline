@@ -216,3 +216,15 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project data and credentials
+.env
+.env.*
+!.env.example
+data/
+*.duckdb
+
+# Local Python files
+.venv/
+__pycache__/
+.pytest_cache/
