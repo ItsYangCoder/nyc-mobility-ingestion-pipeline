@@ -1,0 +1,37 @@
+# Databricks Unity Catalog contract
+#
+# This file is the single naming reference for the NYC Mobility pipeline.
+# Table schemas are separated by medallion layer. The landing schema only
+# owns the external Volume and is not a Bronze table schema.
+
+catalog: nyc_mobility
+
+landing:
+  schema: nyc_group_c
+  volume: nyc_source_files
+  root_path: /Volumes/nyc_mobility/nyc_group_c/nyc_source_files/landing
+
+schemas:
+  bronze: nyc_bronze
+  silver: nyc_silver
+  gold: nyc_gold
+  quality: nyc_quality
+
+pipeline:
+  name: nyc_group_c_mobility_pipeline
+  mode: triggered
+  source_root: transformations
+  default_schema: nyc_bronze
+
+tables:
+  bronze:
+    green_taxi: nyc_mobility.nyc_bronze.bronze_green_taxi_raw
+    weather: nyc_mobility.nyc_bronze.bronze_weather_raw
+    taxi_zones: nyc_mobility.nyc_bronze.bronze_taxi_zones_raw
+
+rules:
+  - Use the development branch for active pipeline work.
+  - Promote to main only through a reviewed pull request with green CI.
+  - Do not write pipeline tables to the landing schema.
+  - Silver and Gold table definitions must use their fully qualified schema names.
+  - Use nyc_quality only for quarantine, reconciliation, and validation outputs.
