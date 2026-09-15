@@ -24,10 +24,13 @@ RAW_DIR = Path("data/raw")
 # Expected raw files
 # ---------------------------------------------------------------------
 
+# Mafelisilda's Green Taxi downloader saves monthly Parquet files inside
+# data/raw/green_taxi/. The filenames match the NYC TLC source filenames.
+GREEN_TAXI_DIR = RAW_DIR / "green_taxi"
 GREEN_TAXI_FILES = {
-    "2026-03": RAW_DIR / "green_taxi_2026-03.parquet",
-    "2026-04": RAW_DIR / "green_taxi_2026-04.parquet",
-    "2026-05": RAW_DIR / "green_taxi_2026-05.parquet",
+    "2026-03": GREEN_TAXI_DIR / "green_tripdata_2026-03.parquet",
+    "2026-04": GREEN_TAXI_DIR / "green_tripdata_2026-04.parquet",
+    "2026-05": GREEN_TAXI_DIR / "green_tripdata_2026-05.parquet",
 }
 
 # Shiena's weather downloader saves date-range JSON files inside
