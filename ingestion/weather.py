@@ -42,18 +42,31 @@ print("Requesting weather data...")
 print(params)
 
 # Send request
-response = requests.get(URL, params=params, timeout=30)
+try:
+    response = requests.get(URL, params=params, timeout=30)
 
-# Check response
-print("HTTP status:", response.status_code)
+    # Check response
+    print("HTTP status:", response.status_code)
 
-response.raise_for_status()
+    response.raise_for_status()
 
-data = response.json()
+except requests.RequestException as error:
+    print(f"ERROR: Failed to retrieve weather data: {error}")
+    raise
+
+
+# Convert response to JSON
+try:
+    data = response.json()
+
+except ValueError:
+    print("ERROR: API response is not valid JSON.")
+    raise
 
 # Check that weather data exists
 if "hourly" not in data:
-    raise ValueError("Response does not contain hourly weather data.")
+    raise ValueError("Response does not contain hourly weather data."
+)
 
 # Save JSON
 filename = OUTPUT_DIR / f"weather_{START_DATE}_{END_DATE}.json"
