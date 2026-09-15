@@ -63,5 +63,14 @@ with open(filename, "w", encoding="utf-8") as file:
 
 print(f"Saved: {filename}")
 
+# Check file size
+file_size_bytes = filename.stat().st_size
+file_size_kb = file_size_bytes / 1024
+file_size_mb = file_size_kb / 1024
+
+print(f"File size: {file_size_bytes:,} bytes")
+print(f"File size: {file_size_kb:.2f} KB")
+print(f"File size: {file_size_mb:.2f} MB")
+
 # Basic coverage check
 print("Number of hourly timestamps:", len(data["hourly"]["time"]))
