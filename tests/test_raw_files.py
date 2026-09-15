@@ -1,32 +1,20 @@
-"""
-Local raw-data acquisition and verification checks.
+"""Local checks for acquired raw files. Raw records are never modified."""
 
-Purpose:
-- Verify that expected raw files exist and are non-empty.
-- Verify that files are readable and match their expected format.
-- Verify required columns and basic date coverage.
-- Report duplicate and missing key indicators without modifying raw data.
-- Detect HTML/error responses saved as data files.
-
-This script does NOT clean, transform, or delete raw records.
-"""
-
+import csv
 import json
 from calendar import monthrange
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
-import pandas as pd
+import pyarrow.parquet as parquet
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
 
-GREEN_TAXI_DIR = RAW_DIR / "green_taxi"
 GREEN_TAXI_FILES = {
-    "2026-03": GREEN_TAXI_DIR / "green_tripdata_2026-03.parquet",
-    "2026-04": GREEN_TAXI_DIR / "green_tripdata_2026-04.parquet",
-    "2026-05": GREEN_TAXI_DIR / "green_tripdata_2026-05.parquet",
+    month: RAW_DIR / "green_taxi" / f"green_tripdata_{month}.parquet"
+    for month in ("2026-03", "2026-04", "2026-05")
 }
 GREEN_TAXI_REQUIRED_COLUMNS = {
     "VendorID",
@@ -35,20 +23,19 @@ GREEN_TAXI_REQUIRED_COLUMNS = {
     "PULocationID",
     "DOLocationID",
 }
-GREEN_TAXI_DUPLICATE_KEYS = [
+GREEN_TAXI_CANDIDATE_KEY = [
     "VendorID",
     "lpep_pickup_datetime",
     "lpep_dropoff_datetime",
     "PULocationID",
     "DOLocationID",
 ]
-GREEN_TAXI_INVENTORY_PATH = PROJECT_ROOT / "docs" / "green_taxi_inventory.csv"
+GREEN_TAXI_INVENTORY = PROJECT_ROOT / "docs" / "green_taxi_inventory.csv"
 
-WEATHER_DIR = RAW_DIR / "weather"
 WEATHER_FILES = {
-    "2026-03": WEATHER_DIR / "weather_2026-03-01_2026-03-31.json",
-    "2026-04": WEATHER_DIR / "weather_2026-04-01_2026-04-30.json",
-    "2026-05": WEATHER_DIR / "weather_2026-05-01_2026-05-31.json",
+    "2026-03": RAW_DIR / "weather" / "weather_2026-03-01_2026-03-31.json",
+    "2026-04": RAW_DIR / "weather" / "weather_2026-04-01_2026-04-30.json",
+    "2026-05": RAW_DIR / "weather" / "weather_2026-05-01_2026-05-31.json",
 }
 WEATHER_REQUIRED_FIELDS = {
     "time",
@@ -61,326 +48,237 @@ TAXI_ZONES_FILE = RAW_DIR / "taxi_zones" / "taxi_zone_lookup.csv"
 TAXI_ZONES_REQUIRED_COLUMNS = {"LocationID", "Borough", "Zone"}
 
 
-# ---------------------------------------------------------------------
-# Generic checks
-# ---------------------------------------------------------------------
-
-
-def check_exists(path: Path) -> bool:
-    """Check that a file exists."""
+def check_file(path: Path) -> bool:
+    """Check file presence, size, and obvious error-page content."""
     if not path.exists():
         print(f"FAIL | Missing file: {path}")
         return False
-
-    print(f"PASS | Exists: {path}")
-    return True
-
-
-def check_non_empty(path: Path) -> bool:
-    """Check that a file is not empty."""
     if path.stat().st_size == 0:
         print(f"FAIL | Empty file: {path}")
         return False
 
-    print(f"PASS | Non-empty: {path}")
-    return True
-
-
-def check_not_html(path: Path) -> bool:
-    """Detect common HTML/error-page responses saved as data."""
     try:
-        content = path.read_bytes()[:1000].lower()
-    except OSError as exc:
-        print(f"FAIL | Could not read {path}: {exc}")
+        sample = path.read_bytes()[:1000].lower()
+    except OSError as error:
+        print(f"FAIL | Could not read {path}: {error}")
         return False
 
-    html_markers = (
+    error_markers = (
         b"<!doctype html",
         b"<html",
         b"<head",
         b"<body",
         b"access denied",
     )
-
-    if any(marker in content for marker in html_markers):
+    if any(marker in sample for marker in error_markers):
         print(f"FAIL | Possible HTML/error response: {path}")
         return False
 
-    print(f"PASS | No obvious HTML/error response: {path}")
+    print(f"PASS | File exists and is non-empty: {path}")
     return True
 
 
-def check_required_columns(
-    columns: list[str], required_columns: set[str], dataset_name: str
-) -> bool:
-    """Check that all required columns are present."""
-    missing_columns = required_columns - set(columns)
-
-    if missing_columns:
-        print(
-            f"FAIL | {dataset_name} missing required columns: "
-            f"{sorted(missing_columns)}"
-        )
-        return False
-
-    print(f"PASS | {dataset_name} required columns are present")
-    return True
+def month_bounds(month: str) -> tuple[date, date]:
+    year, month_number = map(int, month.split("-"))
+    return (
+        date(year, month_number, 1),
+        date(year, month_number, monthrange(year, month_number)[1]),
+    )
 
 
-# ---------------------------------------------------------------------
-# Green Taxi Parquet checks
-# ---------------------------------------------------------------------
+def as_date(value: object) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).date()
+        except ValueError:
+            return None
+    return None
 
 
-def check_green_taxi_file(path: Path, expected_month: str) -> bool:
-    """Validate one Green Taxi monthly Parquet file."""
-    print(f"\nChecking Green Taxi: {path}")
-
-    if not check_exists(path) or not check_non_empty(path):
-        return False
-
-    if not check_not_html(path):
+def check_green_taxi(path: Path, expected_month: str) -> bool:
+    print(f"\nChecking Green Taxi: {path.name}")
+    if not check_file(path):
         return False
 
     try:
-        dataframe = pd.read_parquet(path)
-    except Exception as exc:
-        print(f"FAIL | Could not read Parquet: {exc}")
+        table = parquet.read_table(path)
+    except Exception as error:
+        print(f"FAIL | Could not read Parquet: {error}")
         return False
 
-    print("PASS | Readable Parquet")
-    print(f"INFO | Rows: {len(dataframe):,}")
-    print(f"INFO | Columns: {list(dataframe.columns)}")
-
-    if dataframe.empty:
+    columns = set(table.column_names)
+    missing_columns = GREEN_TAXI_REQUIRED_COLUMNS - columns
+    if missing_columns:
+        print(f"FAIL | Missing columns: {sorted(missing_columns)}")
+        return False
+    if table.num_rows == 0:
         print("FAIL | Parquet contains zero rows")
         return False
 
-    print("PASS | Contains records")
+    pickup_values = table["lpep_pickup_datetime"].to_pylist()
+    pickup_dates = [as_date(value) for value in pickup_values]
+    valid_dates = {value for value in pickup_dates if value is not None}
+    expected_start, expected_end = month_bounds(expected_month)
 
-    if not check_required_columns(
-        list(dataframe.columns), GREEN_TAXI_REQUIRED_COLUMNS, "Green Taxi"
-    ):
-        return False
-
-    pickup_dates = pd.to_datetime(
-        dataframe["lpep_pickup_datetime"], errors="coerce"
-    ).dt.date
-    expected_year, expected_month_number = map(int, expected_month.split("-"))
-    expected_start = date(expected_year, expected_month_number, 1)
-    expected_end = date(
-        expected_year,
-        expected_month_number,
-        monthrange(expected_year, expected_month_number)[1],
-    )
-
-    invalid_dates = pickup_dates.isna().sum()
-    if invalid_dates:
-        print(f"WARN | Invalid pickup dates: {invalid_dates:,}")
-    else:
-        print("PASS | Pickup dates are readable")
-
-    actual_start = pickup_dates.min()
-    actual_end = pickup_dates.max()
-    print(f"INFO | Pickup date range: {actual_start} to {actual_end}")
-
-    if actual_start is not None and actual_end is not None:
-        if actual_start < expected_start or actual_end > expected_end:
-            print(
-                "WARN | Pickup date range extends outside the expected "
-                f"month {expected_month}"
-            )
-
-    missing_key_values = dataframe[GREEN_TAXI_DUPLICATE_KEYS].isna().sum()
-    missing_key_total = int(missing_key_values.sum())
-    print(f"INFO | Missing values in candidate key columns: {missing_key_total:,}")
-
-    duplicate_count = dataframe.duplicated(
-        subset=GREEN_TAXI_DUPLICATE_KEYS
-    ).sum()
-    print(
-        "INFO | Duplicate rows using candidate key "
-        f"{GREEN_TAXI_DUPLICATE_KEYS}: {duplicate_count:,}"
-    )
-
-    return True
-
-
-# ---------------------------------------------------------------------
-# Weather JSON checks
-# ---------------------------------------------------------------------
-
-
-def check_weather_file(path: Path, expected_month: str) -> bool:
-    """Validate one Open-Meteo hourly weather JSON response."""
-    print(f"\nChecking Weather JSON: {path}")
-
-    if not check_exists(path) or not check_non_empty(path):
-        return False
-
-    if not check_not_html(path):
-        return False
-
-    try:
-        with path.open("r", encoding="utf-8") as file:
-            data = json.load(file)
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"FAIL | Invalid JSON: {exc}")
-        return False
-
-    if not isinstance(data, dict):
-        print("FAIL | Expected JSON object")
-        return False
-
-    print("PASS | Valid JSON")
-
-    hourly = data.get("hourly")
-    if not isinstance(hourly, dict):
-        print("FAIL | Missing or invalid 'hourly' weather data")
-        return False
-
-    missing_fields = WEATHER_REQUIRED_FIELDS - set(hourly)
-    if missing_fields:
+    if expected_start not in valid_dates or expected_end not in valid_dates:
         print(
-            "FAIL | Weather missing required fields: "
-            f"{sorted(missing_fields)}"
-        )
-        return False
-
-    print("PASS | Weather required fields are present")
-
-    timestamps = hourly["time"]
-    if not isinstance(timestamps, list) or not timestamps:
-        print("FAIL | Weather timestamp list is missing or empty")
-        return False
-
-    variable_lengths_match = True
-    for field in WEATHER_REQUIRED_FIELDS - {"time"}:
-        values = hourly[field]
-        if not isinstance(values, list):
-            print(f"FAIL | Weather field is not a list: {field}")
-            variable_lengths_match = False
-            continue
-
-        if len(values) != len(timestamps):
-            print(
-                f"FAIL | {field} length {len(values):,} does not match "
-                f"timestamp length {len(timestamps):,}"
-            )
-            variable_lengths_match = False
-
-    if not variable_lengths_match:
-        return False
-
-    print(f"INFO | Hourly records: {len(timestamps):,}")
-
-    try:
-        parsed_timestamps = pd.to_datetime(timestamps, errors="raise")
-    except (TypeError, ValueError) as exc:
-        print(f"FAIL | Invalid weather timestamp: {exc}")
-        return False
-
-    duplicate_timestamps = parsed_timestamps.duplicated().sum()
-    print(f"INFO | Duplicate timestamps: {duplicate_timestamps:,}")
-
-    expected_year, expected_month_number = map(int, expected_month.split("-"))
-    expected_start = date(expected_year, expected_month_number, 1)
-    expected_end = date(
-        expected_year,
-        expected_month_number,
-        monthrange(expected_year, expected_month_number)[1],
-    )
-
-    actual_start = parsed_timestamps.min().date()
-    actual_end = parsed_timestamps.max().date()
-    print(f"INFO | Date coverage: {actual_start} to {actual_end}")
-
-    if actual_start != expected_start or actual_end != expected_end:
-        print(
-            "FAIL | Weather date coverage does not match expected "
+            "FAIL | Pickup coverage does not include the full expected month: "
             f"{expected_start} to {expected_end}"
         )
         return False
 
-    expected_dates = pd.date_range(expected_start, expected_end, freq="D").date
-    actual_dates = set(parsed_timestamps.date)
-    missing_dates = set(expected_dates) - actual_dates
+    invalid_dates = sum(value is None for value in pickup_dates)
+    outside_month = sum(
+        value is not None and not expected_start <= value <= expected_end
+        for value in pickup_dates
+    )
 
-    if missing_dates:
-        print(f"FAIL | Missing weather dates: {sorted(missing_dates)}")
+    key_columns = [table[name].to_pylist() for name in GREEN_TAXI_CANDIDATE_KEY]
+    seen_keys = set()
+    duplicate_keys = 0
+    missing_key_rows = 0
+    for key in zip(*key_columns):
+        if any(value is None for value in key):
+            missing_key_rows += 1
+        if key in seen_keys:
+            duplicate_keys += 1
+        else:
+            seen_keys.add(key)
+
+    print(f"PASS | Rows: {table.num_rows:,}")
+    print(f"INFO | Invalid pickup dates: {invalid_dates:,}")
+    print(f"INFO | Rows outside expected month: {outside_month:,}")
+    print(f"INFO | Missing candidate-key rows: {missing_key_rows:,}")
+    print(f"INFO | Duplicate candidate keys: {duplicate_keys:,}")
+    return True
+
+
+def check_weather(path: Path, expected_month: str) -> bool:
+    print(f"\nChecking Weather: {path.name}")
+    if not check_file(path):
         return False
 
-    if duplicate_timestamps:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        print(f"FAIL | Invalid JSON: {error}")
+        return False
+
+    hourly = data.get("hourly") if isinstance(data, dict) else None
+    if not isinstance(hourly, dict):
+        print("FAIL | Missing or invalid hourly object")
+        return False
+
+    missing_fields = WEATHER_REQUIRED_FIELDS - set(hourly)
+    if missing_fields:
+        print(f"FAIL | Missing weather fields: {sorted(missing_fields)}")
+        return False
+
+    timestamps = hourly["time"]
+    if not isinstance(timestamps, list) or not timestamps:
+        print("FAIL | Weather timestamps are missing or empty")
+        return False
+
+    for field in WEATHER_REQUIRED_FIELDS - {"time"}:
+        values = hourly[field]
+        if not isinstance(values, list) or len(values) != len(timestamps):
+            print(f"FAIL | {field} does not match timestamp length")
+            return False
+
+    try:
+        parsed = [datetime.fromisoformat(value.replace("Z", "+00:00")) for value in timestamps]
+    except (AttributeError, ValueError) as error:
+        print(f"FAIL | Invalid timestamp: {error}")
+        return False
+
+    if len(set(parsed)) != len(parsed):
         print("FAIL | Duplicate weather timestamps detected")
         return False
 
-    print("PASS | Weather date coverage and timestamps are valid")
+    expected_start, expected_end = month_bounds(expected_month)
+    actual_dates = {value.date() for value in parsed}
+    expected_dates = {
+        date(expected_start.year, expected_start.month, day)
+        for day in range(1, expected_end.day + 1)
+    }
+    if actual_dates != expected_dates:
+        print("FAIL | Weather date coverage does not match expected month")
+        return False
+
+    print(f"PASS | Hourly records: {len(timestamps):,}")
     return True
 
 
-# ---------------------------------------------------------------------
-# Taxi Zones CSV checks
-# ---------------------------------------------------------------------
-
-
-def check_taxi_zones_file(path: Path) -> bool:
-    """Validate the NYC Taxi Zones CSV."""
-    print(f"\nChecking Taxi Zones CSV: {path}")
-
-    if not check_exists(path) or not check_non_empty(path):
-        return False
-
-    if not check_not_html(path):
+def check_weather_metadata(weather_path: Path) -> bool:
+    metadata_path = weather_path.with_name(
+        f"{weather_path.stem}_metadata.json"
+    )
+    if not check_file(metadata_path):
         return False
 
     try:
-        dataframe = pd.read_csv(path)
-    except Exception as exc:
-        print(f"FAIL | Could not read CSV: {exc}")
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        print(f"FAIL | Invalid weather metadata: {error}")
         return False
 
-    print("PASS | Readable CSV")
-    print(f"INFO | Rows: {len(dataframe):,}")
-    print(f"INFO | Columns: {list(dataframe.columns)}")
+    required = {"retrieved_at", "request_parameters", "timezone", "units"}
+    missing = required - set(metadata) if isinstance(metadata, dict) else required
+    if missing:
+        print(f"FAIL | Weather metadata missing fields: {sorted(missing)}")
+        return False
 
-    if dataframe.empty:
+    print("PASS | Weather acquisition metadata is recorded")
+    return True
+
+
+def check_taxi_zones(path: Path) -> bool:
+    print(f"\nChecking Taxi Zones: {path.name}")
+    if not check_file(path):
+        return False
+
+    try:
+        with path.open("r", encoding="utf-8-sig", newline="") as file:
+            reader = csv.DictReader(file)
+            columns = set(reader.fieldnames or [])
+            rows = list(reader)
+    except (OSError, csv.Error) as error:
+        print(f"FAIL | Could not read CSV: {error}")
+        return False
+
+    missing_columns = TAXI_ZONES_REQUIRED_COLUMNS - columns
+    if missing_columns:
+        print(f"FAIL | Missing columns: {sorted(missing_columns)}")
+        return False
+    if not rows:
         print("FAIL | CSV contains zero rows")
         return False
 
-    print("PASS | Contains records")
-
-    if not check_required_columns(
-        list(dataframe.columns), TAXI_ZONES_REQUIRED_COLUMNS, "Taxi Zones"
-    ):
+    ids = [(row.get("LocationID") or "").strip() for row in rows]
+    missing_ids = sum(not value for value in ids)
+    duplicate_ids = len([value for value in ids if value]) - len(
+        {value for value in ids if value}
+    )
+    if missing_ids or duplicate_ids:
+        print(
+            f"FAIL | Missing LocationID: {missing_ids:,}; "
+            f"duplicates: {duplicate_ids:,}"
+        )
         return False
 
-    duplicate_count = dataframe["LocationID"].duplicated().sum()
-    missing_count = dataframe["LocationID"].isna().sum()
-
-    print(f"INFO | Duplicate LocationID: {duplicate_count:,}")
-    print(f"INFO | Missing LocationID: {missing_count:,}")
-
+    print(f"PASS | Rows: {len(rows):,}; LocationID is complete and unique")
     return True
 
 
-# ---------------------------------------------------------------------
-# Metadata checks
-# ---------------------------------------------------------------------
-
-
 def check_green_taxi_inventory() -> bool:
-    """Check that Green Taxi acquisition metadata is recorded."""
-    if not GREEN_TAXI_INVENTORY_PATH.exists():
-        print(f"WARN | Green Taxi inventory not found: {GREEN_TAXI_INVENTORY_PATH}")
+    if not check_file(GREEN_TAXI_INVENTORY):
         return False
 
-    try:
-        inventory = pd.read_csv(GREEN_TAXI_INVENTORY_PATH)
-    except Exception as exc:
-        print(f"WARN | Could not read Green Taxi inventory: {exc}")
-        return False
-
-    required_fields = {
+    required = {
         "filename",
         "source_url",
         "retrieved_at_utc",
@@ -388,53 +286,40 @@ def check_green_taxi_inventory() -> bool:
         "row_count",
         "columns",
     }
-    missing_fields = required_fields - set(inventory.columns)
+    try:
+        with GREEN_TAXI_INVENTORY.open("r", encoding="utf-8-sig", newline="") as file:
+            reader = csv.DictReader(file)
+            missing = required - set(reader.fieldnames or [])
+            rows = list(reader)
+    except (OSError, csv.Error) as error:
+        print(f"FAIL | Could not read Green Taxi inventory: {error}")
+        return False
 
-    if missing_fields:
-        print(f"WARN | Green Taxi inventory missing fields: {sorted(missing_fields)}")
+    if missing or not rows:
+        print(f"FAIL | Green Taxi inventory missing fields: {sorted(missing)}")
         return False
 
     print("PASS | Green Taxi acquisition metadata is recorded")
     return True
 
 
-# ---------------------------------------------------------------------
-# Main verification
-# ---------------------------------------------------------------------
-
-
 def main() -> int:
-    print("=" * 70)
-    print("NYC MOBILITY RAW DATA VERIFICATION")
-    print("=" * 70)
-
     results = []
-
     for month, path in GREEN_TAXI_FILES.items():
-        result = check_green_taxi_file(path, month)
-        results.append((f"Green Taxi {month}", result))
-
+        results.append((f"Green Taxi {month}", check_green_taxi(path, month)))
     results.append(("Green Taxi metadata", check_green_taxi_inventory()))
 
     for month, path in WEATHER_FILES.items():
-        result = check_weather_file(path, month)
-        results.append((f"Weather {month}", result))
+        results.append((f"Weather {month}", check_weather(path, month)))
+        results.append((f"Weather metadata {month}", check_weather_metadata(path)))
 
-    results.append(("Taxi Zones", check_taxi_zones_file(TAXI_ZONES_FILE)))
+    results.append(("Taxi Zones", check_taxi_zones(TAXI_ZONES_FILE)))
 
-    print("\n" + "=" * 70)
-    print("SUMMARY")
-    print("=" * 70)
-
+    print("\nSUMMARY")
     failures = 0
-
     for name, passed in results:
-        status = "PASS" if passed else "FAIL"
-        print(f"{status:5} | {name}")
-        if not passed:
-            failures += 1
-
-    print("=" * 70)
+        print(f"{'PASS' if passed else 'FAIL':5} | {name}")
+        failures += not passed
 
     if failures:
         print(f"FAIL | {failures} check(s) need attention.")
