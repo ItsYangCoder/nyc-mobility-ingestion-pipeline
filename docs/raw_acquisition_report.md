@@ -22,13 +22,15 @@ The verification focuses on:
 
 ## 2. Required Raw Datasets
 
-| Dataset                       | Expected Coverage       | Format  | Status       |
-| ----------------------------- | ----------------------- | ------- | ------------ |
-| NYC Green Taxi                | March 2026              | Parquet | NOT VERIFIED |
-| NYC Green Taxi                | April 2026              | Parquet | NOT VERIFIED |
-| NYC Green Taxi                | May 2026                | Parquet | NOT VERIFIED |
-| Open-Meteo Historical Weather | Required project period | JSON    | NOT VERIFIED |
-| NYC Taxi Zones                | Reference dataset       | CSV     | NOT VERIFIED |
+| Dataset | Expected Coverage | Format | Expected Raw File | Status |
+| --- | --- | --- | --- | --- |
+| Green Taxi | March 2026 | Parquet | `green_tripdata_2026-03.parquet` | NOT VERIFIED |
+| Green Taxi | April 2026 | Parquet | `green_tripdata_2026-04.parquet` | NOT VERIFIED |
+| Green Taxi | May 2026 | Parquet | `green_tripdata_2026-05.parquet` | NOT VERIFIED |
+| Open-Meteo Weather | March 2026 | JSON | `weather_2026-03-01_2026-03-31.json` | NOT VERIFIED |
+| Open-Meteo Weather | April 2026 | JSON | `weather_2026-04-01_2026-04-30.json` | NOT VERIFIED |
+| Open-Meteo Weather | May 2026 | JSON | `weather_2026-05-01_2026-05-31.json` | NOT VERIFIED |
+| Taxi Zones | Reference data | CSV | `taxi_zone_lookup.csv` | NOT VERIFIED |
 
 ---
 
@@ -39,10 +41,11 @@ The verification focuses on:
 * File exists: NOT VERIFIED
 * File is non-empty: NOT VERIFIED
 * Parquet is readable: NOT VERIFIED
-* Expected columns present: NOT VERIFIED
+* Required columns present: NOT VERIFIED
 * Row count recorded: NOT VERIFIED
-* Duplicate key check: NOT VERIFIED
-* Date coverage verified: NOT VERIFIED
+* Pickup date coverage verified: NOT VERIFIED
+* Duplicate key indicators checked: NOT VERIFIED
+* Missing key values checked: NOT VERIFIED
 * Source URL recorded: NOT VERIFIED
 * Retrieval metadata recorded: NOT VERIFIED
 
@@ -53,10 +56,11 @@ The verification focuses on:
 * File exists: NOT VERIFIED
 * File is non-empty: NOT VERIFIED
 * Parquet is readable: NOT VERIFIED
-* Expected columns present: NOT VERIFIED
+* Required columns present: NOT VERIFIED
 * Row count recorded: NOT VERIFIED
-* Duplicate key check: NOT VERIFIED
-* Date coverage verified: NOT VERIFIED
+* Pickup date coverage verified: NOT VERIFIED
+* Duplicate key indicators checked: NOT VERIFIED
+* Missing key values checked: NOT VERIFIED
 * Source URL recorded: NOT VERIFIED
 * Retrieval metadata recorded: NOT VERIFIED
 
@@ -67,10 +71,11 @@ The verification focuses on:
 * File exists: NOT VERIFIED
 * File is non-empty: NOT VERIFIED
 * Parquet is readable: NOT VERIFIED
-* Expected columns present: NOT VERIFIED
+* Required columns present: NOT VERIFIED
 * Row count recorded: NOT VERIFIED
-* Duplicate key check: NOT VERIFIED
-* Date coverage verified: NOT VERIFIED
+* Pickup date coverage verified: NOT VERIFIED
+* Duplicate key indicators checked: NOT VERIFIED
+* Missing key values checked: NOT VERIFIED
 * Source URL recorded: NOT VERIFIED
 * Retrieval metadata recorded: NOT VERIFIED
 
@@ -80,17 +85,51 @@ The verification focuses on:
 
 ## 4. Open-Meteo Weather Verification
 
+### March 2026
+
 * JSON file exists: NOT VERIFIED
 * File is non-empty: NOT VERIFIED
 * JSON is valid/readable: NOT VERIFIED
-* Expected weather fields present: NOT VERIFIED
-* Required date coverage present: NOT VERIFIED
-* Record count recorded: NOT VERIFIED
-* Duplicate dates checked: NOT VERIFIED
+* `hourly` data present: NOT VERIFIED
+* Required weather fields present: NOT VERIFIED
+* Weather array lengths match timestamps: NOT VERIFIED
+* Date coverage verified: NOT VERIFIED
+* Duplicate timestamps checked: NOT VERIFIED
 * Missing dates checked: NOT VERIFIED
-* API URL/request parameters recorded: NOT VERIFIED
+* API request parameters recorded: NOT VERIFIED
 * Retrieval timestamp recorded: NOT VERIFIED
-* Error response detection completed: NOT VERIFIED
+
+**Status: NOT VERIFIED**
+
+### April 2026
+
+* JSON file exists: NOT VERIFIED
+* File is non-empty: NOT VERIFIED
+* JSON is valid/readable: NOT VERIFIED
+* `hourly` data present: NOT VERIFIED
+* Required weather fields present: NOT VERIFIED
+* Weather array lengths match timestamps: NOT VERIFIED
+* Date coverage verified: NOT VERIFIED
+* Duplicate timestamps checked: NOT VERIFIED
+* Missing dates checked: NOT VERIFIED
+* API request parameters recorded: NOT VERIFIED
+* Retrieval timestamp recorded: NOT VERIFIED
+
+**Status: NOT VERIFIED**
+
+### May 2026
+
+* JSON file exists: NOT VERIFIED
+* File is non-empty: NOT VERIFIED
+* JSON is valid/readable: NOT VERIFIED
+* `hourly` data present: NOT VERIFIED
+* Required weather fields present: NOT VERIFIED
+* Weather array lengths match timestamps: NOT VERIFIED
+* Date coverage verified: NOT VERIFIED
+* Duplicate timestamps checked: NOT VERIFIED
+* Missing dates checked: NOT VERIFIED
+* API request parameters recorded: NOT VERIFIED
+* Retrieval timestamp recorded: NOT VERIFIED
 
 **Status: NOT VERIFIED**
 
@@ -101,7 +140,7 @@ The verification focuses on:
 * CSV file exists: NOT VERIFIED
 * File is non-empty: NOT VERIFIED
 * CSV is readable: NOT VERIFIED
-* Expected columns present: NOT VERIFIED
+* Required columns present: NOT VERIFIED
 * Row count recorded: NOT VERIFIED
 * `LocationID` duplicates checked: NOT VERIFIED
 * Missing `LocationID` checked: NOT VERIFIED
@@ -115,18 +154,19 @@ The verification focuses on:
 
 ## 6. Findings
 
-No final findings have been recorded yet because the raw datasets have not been verified locally.
+No final findings have been recorded yet because the required raw datasets have not been verified locally.
 
 Once acquisition is complete, findings should include:
 
 * Missing files
-* Unexpected duplicate records/keys
-* Missing keys or dates
+* Unexpected duplicate records/keys or timestamps
+* Missing key values or dates
 * Unexpected row counts
 * Schema differences
 * Unreadable/corrupted files
 * HTML/error responses saved instead of the expected dataset
 * Incomplete date coverage
+* Missing acquisition metadata
 
 These findings will be reported to the corresponding source owner for rerun or correction.
 
