@@ -1,16 +1,20 @@
-from pathlib import Path
-from datetime import datetime
+import argparse
 import csv
+import json
+from datetime import datetime
+from pathlib import Path
+
 import requests
 
-SOURCE_URL = "https://d37ci6vzurychx.cloudfront.net/misc/taxi_zone_lookup.csv"
 
-OUTPUT_DIR = Path("data/raw/taxi_zones")
-OUTPUT_FILE = OUTPUT_DIR / "taxi_zone_lookup.csv"
-
+SOURCE_URL = (
+    "https://d37ci6vzurychx.cloudfront.net/misc/taxi_zone_lookup.csv"
+)
+DEFAULT_OUTPUT_DIR = Path("data/raw/taxi_zones")
 REQUIRED_COLUMNS = {"LocationID", "Zone", "Borough"}
 
-def profile_csv(file_path: Path):
+
+def profile_csv(file_path: Path) -> dict[str, object]:
     with file_path.open("r", encoding="utf-8-sig", newline="") as file:
         reader = csv.DictReader(file)
 
@@ -18,9 +22,7 @@ def profile_csv(file_path: Path):
             raise ValueError("The file does not contain a valid CSV header.")
 
         columns = reader.fieldnames
-
         missing_columns = REQUIRED_COLUMNS - set(columns)
-
         if missing_columns:
             raise ValueError(
                 f"Missing required columns: {sorted(missing_columns)}"
@@ -33,7 +35,6 @@ def profile_csv(file_path: Path):
 
         for row in reader:
             row_count += 1
-
             location_id = (row.get("LocationID") or "").strip()
 
             if not location_id:
@@ -43,39 +44,86 @@ def profile_csv(file_path: Path):
             else:
                 seen_location_ids.add(location_id)
 
-        print(f"Rows: {row_count}")
-        print(f"Columns: {columns}")
-        print(f"Null LocationID values: {null_location_ids}")
-        print(f"Duplicate LocationID values: {duplicate_location_ids}")
+    if row_count == 0:
+        raise ValueError("The CSV contains no data rows.")
+    if null_location_ids or duplicate_location_ids:
+        raise ValueError(
+            "LocationID validation failed: "
+            f"{null_location_ids} null and "
+            f"{duplicate_location_ids} duplicate value(s)."
+        )
 
-def download_or_reuse():
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    print(f"Rows: {row_count}")
+    print(f"Columns: {columns}")
+    print(f"Null LocationID values: {null_location_ids}")
+    print(f"Duplicate LocationID values: {duplicate_location_ids}")
+    return {"row_count": row_count, "columns": columns}
 
-    if OUTPUT_FILE.exists():
-        print(f"Existing file found: {OUTPUT_FILE}")
+
+def download_or_reuse(
+    output_dir: Path = DEFAULT_OUTPUT_DIR,
+) -> None:
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_file = output_dir / "taxi_zone_lookup.csv"
+    metadata_file = output_dir / "taxi_zone_lookup_metadata.json"
+
+    if output_file.exists():
+        print(f"Existing file found: {output_file}")
         print("Verifying existing file...")
-
-        profile_csv(OUTPUT_FILE)
-
-        print("Existing file is valid. Reusing it.")
-        print(f"File size: {OUTPUT_FILE.stat().st_size} bytes")
+        profile_csv(output_file)
+        print("Existing file is valid. Download skipped.")
+        print(f"File size: {output_file.stat().st_size} bytes")
         return
 
+    temp_file = output_file.with_suffix(".csv.part")
+    metadata_temp = metadata_file.with_suffix(".json.part")
     print(f"Downloading from: {SOURCE_URL}")
 
-    response = requests.get(SOURCE_URL, timeout=30)
-    response.raise_for_status()
+    try:
+        response = requests.get(SOURCE_URL, timeout=30)
+        response.raise_for_status()
+        temp_file.write_bytes(response.content)
+        profile = profile_csv(temp_file)
 
-    OUTPUT_FILE.write_bytes(response.content)
+        retrieval_time = datetime.now().astimezone().isoformat(
+            timespec="seconds"
+        )
+        metadata = {
+            "source_url": SOURCE_URL,
+            "retrieved_at": retrieval_time,
+            "file_size_bytes": temp_file.stat().st_size,
+            **profile,
+        }
+        with metadata_temp.open("w", encoding="utf-8") as file:
+            json.dump(metadata, file, indent=2)
 
-    retrieval_time = datetime.now().astimezone().isoformat(timespec="seconds")
+        temp_file.replace(output_file)
+        metadata_temp.replace(metadata_file)
+    finally:
+        if temp_file.exists():
+            temp_file.unlink()
+        if metadata_temp.exists():
+            metadata_temp.unlink()
 
-    print(f"Downloaded: {OUTPUT_FILE}")
-    print(f"Retrieval time: {retrieval_time}")
-    print(f"File size: {OUTPUT_FILE.stat().st_size} bytes")
+    print(f"Downloaded and verified: {output_file}")
+    print(f"Saved metadata: {metadata_file}")
+    print(f"File size: {output_file.stat().st_size} bytes")
 
-    print("Verifying downloaded CSV...")
-    profile_csv(OUTPUT_FILE)
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Download and validate the NYC Taxi Zone lookup CSV."
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=DEFAULT_OUTPUT_DIR,
+        help="landing directory; accepts a Databricks /Volumes/... path",
+    )
+    args = parser.parse_args()
+    download_or_reuse(args.output_dir)
+
 
 if __name__ == "__main__":
-    download_or_reuse()
+    main()

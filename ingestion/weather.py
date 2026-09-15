@@ -15,7 +15,7 @@ HOURLY_VARIABLES = [
     "wind_speed_10m",
 ]
 URL = "https://archive-api.open-meteo.com/v1/archive"
-OUTPUT_DIR = Path("data/raw/weather")
+DEFAULT_OUTPUT_DIR = Path("data/raw/weather")
 
 
 def valid_date(value: str) -> str:
@@ -42,6 +42,14 @@ def validate_weather(data: object) -> dict:
     if not isinstance(timestamps, list) or not timestamps:
         raise ValueError("Hourly timestamps are missing or empty.")
 
+    try:
+        parsed = [datetime.fromisoformat(value.replace("Z", "+00:00"))
+                  for value in timestamps]
+    except (AttributeError, TypeError, ValueError) as error:
+        raise ValueError("Hourly timestamps must be valid ISO datetime strings.") from error
+    if len(set(parsed)) != len(parsed):
+        raise ValueError("Duplicate hourly timestamps are not allowed.")
+
     for variable in HOURLY_VARIABLES:
         values = hourly.get(variable)
         if not isinstance(values, list):
@@ -52,8 +60,6 @@ def validate_weather(data: object) -> dict:
             )
 
     return hourly
-
-
 def load_existing_weather(filename: Path) -> dict | None:
     """Reuse an existing raw file only after it passes validation."""
     if not filename.exists():
@@ -76,15 +82,20 @@ def load_existing_weather(filename: Path) -> dict | None:
     return data
 
 
-def download_weather(start_date: str, end_date: str) -> None:
+def download_weather(
+    start_date: str,
+    end_date: str,
+    output_dir: Path = DEFAULT_OUTPUT_DIR,
+) -> None:
     """Download and validate one date range without overwriting valid raw data."""
     if start_date > end_date:
         raise ValueError("Start date must be on or before end date.")
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    filename = OUTPUT_DIR / f"weather_{start_date}_{end_date}.json"
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    filename = output_dir / f"weather_{start_date}_{end_date}.json"
     metadata_filename = (
-        OUTPUT_DIR / f"weather_{start_date}_{end_date}_metadata.json"
+        output_dir / f"weather_{start_date}_{end_date}_metadata.json"
     )
 
     existing_data = load_existing_weather(filename)
@@ -114,8 +125,6 @@ def download_weather(start_date: str, end_date: str) -> None:
         raise ValueError("API response is not valid JSON.") from error
 
     hourly = validate_weather(data)
-
-    # Write temporary files first, then promote them after validation.
     raw_temp = filename.with_suffix(".json.part")
     metadata_temp = metadata_filename.with_suffix(".json.part")
 
@@ -130,12 +139,18 @@ def download_weather(start_date: str, end_date: str) -> None:
         "units": data.get("hourly_units", {}),
     }
 
-    raw_temp.write_bytes(response.content)
-    with metadata_temp.open("w", encoding="utf-8") as file:
-        json.dump(metadata, file, indent=2)
+    try:
+        raw_temp.write_bytes(response.content)
+        with metadata_temp.open("w", encoding="utf-8") as file:
+            json.dump(metadata, file, indent=2)
 
-    raw_temp.replace(filename)
-    metadata_temp.replace(metadata_filename)
+        raw_temp.replace(filename)
+        metadata_temp.replace(metadata_filename)
+    finally:
+        if raw_temp.exists():
+            raw_temp.unlink()
+        if metadata_temp.exists():
+            metadata_temp.unlink()
 
     timestamps = hourly["time"]
     file_size_bytes = filename.stat().st_size
@@ -155,8 +170,18 @@ def main() -> None:
     )
     parser.add_argument("--start-date", required=True, type=valid_date)
     parser.add_argument("--end-date", required=True, type=valid_date)
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=DEFAULT_OUTPUT_DIR,
+        help="landing directory; accepts a Databricks /Volumes/... path",
+    )
     args = parser.parse_args()
-    download_weather(args.start_date, args.end_date)
+    download_weather(
+        args.start_date,
+        args.end_date,
+        output_dir=args.output_dir,
+    )
 
 
 if __name__ == "__main__":
