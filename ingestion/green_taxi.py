@@ -24,7 +24,16 @@ INVENTORY_FIELDS = (
 
 def inspect_parquet(path: Path) -> tuple[int, list[str]]:
     parquet_file = parquet.ParquetFile(path)
-    return parquet_file.metadata.num_rows, parquet_file.schema_arrow.names
+    row_count = parquet_file.metadata.num_rows
+    columns = parquet_file.schema_arrow.names
+    required = {"VendorID", "lpep_pickup_datetime", "lpep_dropoff_datetime",
+                "PULocationID", "DOLocationID"}
+    missing = required - set(columns)
+    if missing:
+        raise ValueError(f"Missing required columns: {sorted(missing)}")
+    if row_count == 0:
+        raise ValueError("Parquet contains zero rows.")
+    return row_count, columns
 
 
 def load_inventory(inventory_path: Path) -> dict[str, dict[str, str]]:

@@ -42,6 +42,14 @@ def validate_weather(data: object) -> dict:
     if not isinstance(timestamps, list) or not timestamps:
         raise ValueError("Hourly timestamps are missing or empty.")
 
+    try:
+        parsed = [datetime.fromisoformat(value.replace("Z", "+00:00"))
+                  for value in timestamps]
+    except (AttributeError, TypeError, ValueError) as error:
+        raise ValueError("Hourly timestamps must be valid ISO datetime strings.") from error
+    if len(set(parsed)) != len(parsed):
+        raise ValueError("Duplicate hourly timestamps are not allowed.")
+
     for variable in HOURLY_VARIABLES:
         values = hourly.get(variable)
         if not isinstance(values, list):
