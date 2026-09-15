@@ -11,7 +11,7 @@ This checklist verifies that the raw datasets acquired for the NYC Mobility Pipe
 
 ## 1. Expected Raw Sources
 
-### A. NYC Green Taxi Trip Records
+### A. Green Taxi Trip Records
 
 **Source:** NYC Taxi & Limousine Commission (TLC)
 
@@ -25,17 +25,24 @@ Expected format:
 
 * [ ] Parquet
 
+Expected raw paths:
+
+* `data/raw/green_taxi/green_tripdata_2026-03.parquet`
+* `data/raw/green_taxi/green_tripdata_2026-04.parquet`
+* `data/raw/green_taxi/green_tripdata_2026-05.parquet`
+
 Verification:
 
 * [ ] File exists for each expected month
 * [ ] File is not empty
 * [ ] File can be opened successfully
 * [ ] File is valid Parquet
-* [ ] Expected columns are present
+* [ ] Required columns are present
 * [ ] Row count is recorded
-* [ ] Duplicate/missing key findings are recorded
-* [ ] Source URL is recorded
-* [ ] Retrieval metadata is recorded
+* [ ] Pickup date coverage is recorded
+* [ ] Duplicate/missing key indicators are recorded
+* [ ] Source URL is recorded in the acquisition inventory
+* [ ] Retrieval metadata is recorded in the acquisition inventory
 * [ ] File is not an HTML/error response saved with a `.parquet` extension
 
 **Status:** ☐ PASS ☐ FAIL ☐ PENDING
@@ -48,21 +55,41 @@ Verification:
 
 **Source:** Open-Meteo Historical Weather API
 
+Expected coverage:
+
+* [ ] March 2026
+* [ ] April 2026
+* [ ] May 2026
+
 Expected format:
 
 * [ ] JSON
 
+Expected raw paths:
+
+* `data/raw/weather/weather_2026-03-01_2026-03-31.json`
+* `data/raw/weather/weather_2026-04-01_2026-04-30.json`
+* `data/raw/weather/weather_2026-05-01_2026-05-31.json`
+
+Expected hourly fields:
+
+* `time`
+* `temperature_2m`
+* `precipitation`
+* `wind_speed_10m`
+
 Verification:
 
-* [ ] API response was successfully retrieved
+* [ ] File exists for each expected month
 * [ ] Response is not empty
 * [ ] Response is valid JSON
+* [ ] `hourly` data is present
 * [ ] Expected weather fields are present
+* [ ] Each weather array matches the timestamp count
 * [ ] Expected date coverage is present
-* [ ] Row/record count is recorded where applicable
-* [ ] Duplicate/missing date findings are recorded
-* [ ] API URL/request parameters are recorded
-* [ ] Retrieval metadata is recorded
+* [ ] Duplicate/missing timestamp/date findings are recorded
+* [ ] API request parameters are recorded in metadata
+* [ ] Retrieval timestamp is recorded in metadata
 * [ ] Error response was not saved as valid data
 
 **Status:** ☐ PASS ☐ FAIL ☐ PENDING
@@ -71,7 +98,7 @@ Verification:
 
 ---
 
-### C. NYC Taxi Zones
+### C. Taxi Zones
 
 **Source:** NYC Taxi & Limousine Commission (TLC)
 
@@ -79,15 +106,25 @@ Expected format:
 
 * [ ] CSV
 
+Expected raw path:
+
+* `data/raw/taxi_zones/taxi_zone_lookup.csv`
+
+Required columns:
+
+* `LocationID`
+* `Borough`
+* `Zone`
+
 Verification:
 
 * [ ] File exists
 * [ ] File is not empty
 * [ ] File can be opened successfully
 * [ ] File is valid CSV
-* [ ] Expected columns are present
+* [ ] Required columns are present
 * [ ] Row count is recorded
-* [ ] Duplicate/missing zone identifier findings are recorded
+* [ ] Duplicate/missing `LocationID` findings are recorded
 * [ ] Source URL is recorded
 * [ ] Retrieval metadata is recorded
 * [ ] File is not an HTML/error response saved as `.csv`
@@ -134,8 +171,8 @@ Record findings without modifying the raw data.
 
 Check for:
 
-* [ ] Duplicate keys
-* [ ] Missing keys
+* [ ] Duplicate keys or duplicate timestamp indicators
+* [ ] Missing key values
 * [ ] Unexpected nulls in important fields
 * [ ] Unexpected date coverage
 * [ ] Unexpected row counts
@@ -160,6 +197,7 @@ A download should be considered failed or needing rerun if:
 * [ ] File contains an HTML/error response instead of the expected format
 * [ ] Expected date/month is missing
 * [ ] Expected columns are missing
+* [ ] Weather arrays do not match timestamp count
 * [ ] Download appears incomplete
 * [ ] Retrieval metadata/source URL is missing
 * [ ] Other acquisition error is observed
@@ -175,13 +213,15 @@ When a failure is found:
 
 ## 6. Raw Data Inventory
 
-| Source     | Expected Period | Format  | File | Rows | Status  | Findings |
-| ---------- | --------------- | ------- | ---- | ---: | ------- | -------- |
-| Green Taxi | March 2026      | Parquet | TBD  |  TBD | PENDING |          |
-| Green Taxi | April 2026      | Parquet | TBD  |  TBD | PENDING |          |
-| Green Taxi | May 2026        | Parquet | TBD  |  TBD | PENDING |          |
-| Weather    | Required period | JSON    | TBD  |  TBD | PENDING |          |
-| Taxi Zones | Reference data  | CSV     | TBD  |  TBD | PENDING |          |
+| Source | Expected Period | Format | File | Rows | Status | Findings |
+| --- | --- | --- | --- | ---: | --- | --- |
+| Green Taxi | March 2026 | Parquet | `green_tripdata_2026-03.parquet` | TBD | PENDING | |
+| Green Taxi | April 2026 | Parquet | `green_tripdata_2026-04.parquet` | TBD | PENDING | |
+| Green Taxi | May 2026 | Parquet | `green_tripdata_2026-05.parquet` | TBD | PENDING | |
+| Weather | March 2026 | JSON | `weather_2026-03-01_2026-03-31.json` | TBD | PENDING | |
+| Weather | April 2026 | JSON | `weather_2026-04-01_2026-04-30.json` | TBD | PENDING | |
+| Weather | May 2026 | JSON | `weather_2026-05-01_2026-05-31.json` | TBD | PENDING | |
+| Taxi Zones | Reference data | CSV | `taxi_zone_lookup.csv` | TBD | PENDING | |
 
 ---
 
