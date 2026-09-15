@@ -30,7 +30,9 @@ GREEN_TAXI_FILES = {
     "2026-05": RAW_DIR / "green_taxi_2026-05.parquet",
 }
 
-WEATHER_FILE = RAW_DIR / "weather_2026.json"
+# Shiena's weather downloader saves date-range JSON files inside
+# data/raw/weather/. Metadata files are excluded from this check.
+WEATHER_DIR = RAW_DIR / "weather"
 
 TAXI_ZONES_FILE = RAW_DIR / "taxi_zones" / "taxi_zone_lookup.csv"
 
@@ -107,7 +109,7 @@ def check_green_taxi_file(path: Path) -> bool:
         print(f"FAIL | Could not read Parquet: {exc}")
         return False
 
-    print(f"PASS | Readable Parquet")
+    print("PASS | Readable Parquet")
     print(f"INFO | Rows: {len(df):,}")
     print(f"INFO | Columns: {list(df.columns)}")
 
@@ -137,7 +139,7 @@ def check_green_taxi_file(path: Path) -> bool:
 # ---------------------------------------------------------------------
 
 def check_weather_file(path: Path) -> bool:
-    """Validate the weather JSON response."""
+    """Validate one Open-Meteo weather JSON response."""
 
     print(f"\nChecking Weather JSON: {path}")
 
@@ -179,6 +181,18 @@ def check_weather_file(path: Path) -> bool:
         print("WARN | No 'daily' or 'hourly' section found")
 
     return True
+
+
+def discover_weather_files() -> list[Path]:
+    """Find Shiena's weather JSON outputs, excluding metadata files."""
+    if not WEATHER_DIR.exists():
+        return []
+
+    return sorted(
+        path
+        for path in WEATHER_DIR.glob("weather_*.json")
+        if not path.name.endswith("_metadata.json")
+    )
 
 
 # ---------------------------------------------------------------------
@@ -242,10 +256,16 @@ def main() -> int:
         result = check_green_taxi_file(path)
         results.append((f"Green Taxi {month}", result))
 
-    # Weather
-    results.append(
-        ("Weather JSON", check_weather_file(WEATHER_FILE))
-    )
+    # Weather: use the date-range JSON produced by Shiena's downloader.
+    weather_files = discover_weather_files()
+
+    if not weather_files:
+        print(f"\nFAIL | No Weather JSON found in: {WEATHER_DIR}")
+        results.append(("Weather JSON", False))
+    else:
+        for weather_file in weather_files:
+            result = check_weather_file(weather_file)
+            results.append((f"Weather JSON ({weather_file.name})", result))
 
     # Taxi Zones
     results.append(
