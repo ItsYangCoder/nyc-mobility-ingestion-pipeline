@@ -6,20 +6,25 @@ pipeline does not duplicate previously ingested files.
 
 ## Pipeline source
 
+Configure the pipeline with this whole Git folder:
+
 ```text
-transformations/bronze.py
+transformations/bronze
 ```
 
-## Databricks configuration
+It contains one table definition per source:
 
-Create a new ETL pipeline under **Jobs & Pipelines** with these settings:
+- `green_taxi.py`
+- `weather.py`
+- `taxi_zones.py`
+
+## Databricks configuration
 
 | Setting | Value |
 | --- | --- |
 | Pipeline name | `nyc_group_c_mobility_pipeline` |
-| Product edition | Advanced |
 | Pipeline mode | Triggered |
-| Source code | `transformations/bronze.py` from the Git folder |
+| Source code | `transformations/bronze` from the Git folder |
 | Catalog | `nyc_mobility` |
 | Schema | `nyc_group_c` |
 | Compute | Serverless |
