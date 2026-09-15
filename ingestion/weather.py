@@ -1,89 +1,163 @@
-import requests
+import argparse
 import json
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
-# NYC coordinates
+import requests
+
+
 LATITUDE = 40.7128
 LONGITUDE = -74.0060
-
-# Open-Meteo settings
 TIMEZONE = "America/New_York"
-
-# Dates
-START_DATE = "2026-03-01"
-END_DATE = "2026-03-03"
-
-# Weather variables
 HOURLY_VARIABLES = [
     "temperature_2m",
     "precipitation",
-    "wind_speed_10m"
+    "wind_speed_10m",
 ]
-
-# API URL
 URL = "https://archive-api.open-meteo.com/v1/archive"
-
-# Output folder
 OUTPUT_DIR = Path("data/raw/weather")
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-# API parameters
-params = {
-    "latitude": LATITUDE,
-    "longitude": LONGITUDE,
-    "start_date": START_DATE,
-    "end_date": END_DATE,
-    "hourly": ",".join(HOURLY_VARIABLES),
-    "timezone": TIMEZONE
-}
-
-print("Requesting weather data...")
-print(params)
-
-# Send request
-try:
-    response = requests.get(URL, params=params, timeout=30)
-
-    # Check response
-    print("HTTP status:", response.status_code)
-
-    response.raise_for_status()
-
-except requests.RequestException as error:
-    print(f"ERROR: Failed to retrieve weather data: {error}")
-    raise
 
 
-# Convert response to JSON
-try:
-    data = response.json()
+def valid_date(value: str) -> str:
+    """Validate command-line dates and return the original value."""
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            f"Invalid date '{value}'. Use YYYY-MM-DD."
+        ) from error
+    return value
 
-except ValueError:
-    print("ERROR: API response is not valid JSON.")
-    raise
 
-# Check that weather data exists
-if "hourly" not in data:
-    raise ValueError("Response does not contain hourly weather data."
-)
+def validate_weather(data: object) -> dict:
+    """Validate the fields needed by the pipeline."""
+    if not isinstance(data, dict):
+        raise ValueError("API response must be a JSON object.")
 
-# Save JSON
-filename = OUTPUT_DIR / f"weather_{START_DATE}_{END_DATE}.json"
+    hourly = data.get("hourly")
+    if not isinstance(hourly, dict):
+        raise ValueError("API response does not contain hourly weather data.")
 
-with open(filename, "w", encoding="utf-8") as file:
-    json.dump(data, file, indent=2)
+    timestamps = hourly.get("time")
+    if not isinstance(timestamps, list) or not timestamps:
+        raise ValueError("Hourly timestamps are missing or empty.")
 
-print(f"Saved: {filename}")
+    for variable in HOURLY_VARIABLES:
+        values = hourly.get(variable)
+        if not isinstance(values, list):
+            raise ValueError(f"Hourly field is missing or invalid: {variable}")
+        if len(values) != len(timestamps):
+            raise ValueError(
+                f"{variable} length does not match timestamp length."
+            )
 
-# Check file size
-file_size_bytes = filename.stat().st_size
-file_size_kb = file_size_bytes / 1024
-file_size_mb = file_size_kb / 1024
+    return hourly
 
-print(f"File size: {file_size_bytes:,} bytes")
-print(f"File size: {file_size_kb:.2f} KB")
-print(f"File size: {file_size_mb:.2f} MB")
 
-# Basic coverage check
-print("Number of hourly timestamps:", len(data["hourly"]["time"]))
+def load_existing_weather(filename: Path) -> dict | None:
+    """Reuse an existing raw file only after it passes validation."""
+    if not filename.exists():
+        return None
+
+    print(f"Existing file found: {filename}")
+
+    try:
+        with filename.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+        validate_weather(data)
+    except (OSError, json.JSONDecodeError, ValueError) as error:
+        raise ValueError(
+            f"Existing raw file is invalid: {filename}. "
+            "Keep it for investigation, remove or rename it, then rerun. "
+            f"Reason: {error}"
+        ) from error
+
+    print("Existing file is valid. Download skipped.")
+    return data
+
+
+def download_weather(start_date: str, end_date: str) -> None:
+    """Download and validate one date range without overwriting valid raw data."""
+    if start_date > end_date:
+        raise ValueError("Start date must be on or before end date.")
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    filename = OUTPUT_DIR / f"weather_{start_date}_{end_date}.json"
+    metadata_filename = (
+        OUTPUT_DIR / f"weather_{start_date}_{end_date}_metadata.json"
+    )
+
+    existing_data = load_existing_weather(filename)
+    if existing_data is not None:
+        return
+
+    params = {
+        "latitude": LATITUDE,
+        "longitude": LONGITUDE,
+        "start_date": start_date,
+        "end_date": end_date,
+        "hourly": ",".join(HOURLY_VARIABLES),
+        "timezone": TIMEZONE,
+    }
+
+    print("Requesting weather data...")
+    print(params)
+
+    try:
+        response = requests.get(URL, params=params, timeout=30)
+        print("HTTP status:", response.status_code)
+        response.raise_for_status()
+        data = response.json()
+    except requests.RequestException as error:
+        raise RuntimeError(f"Failed to retrieve weather data: {error}") from error
+    except ValueError as error:
+        raise ValueError("API response is not valid JSON.") from error
+
+    hourly = validate_weather(data)
+
+    # Write temporary files first, then promote them after validation.
+    raw_temp = filename.with_suffix(".json.part")
+    metadata_temp = metadata_filename.with_suffix(".json.part")
+
+    metadata = {
+        "retrieved_at": datetime.now().astimezone().isoformat(),
+        "request_parameters": params,
+        "coordinates": {
+            "latitude": LATITUDE,
+            "longitude": LONGITUDE,
+        },
+        "timezone": TIMEZONE,
+        "units": data.get("hourly_units", {}),
+    }
+
+    raw_temp.write_bytes(response.content)
+    with metadata_temp.open("w", encoding="utf-8") as file:
+        json.dump(metadata, file, indent=2)
+
+    raw_temp.replace(filename)
+    metadata_temp.replace(metadata_filename)
+
+    timestamps = hourly["time"]
+    file_size_bytes = filename.stat().st_size
+
+    print(f"Saved: {filename}")
+    print(f"Saved metadata: {metadata_filename}")
+    print(f"File size: {file_size_bytes:,} bytes")
+    print("First timestamp:", timestamps[0])
+    print("Last timestamp:", timestamps[-1])
+    print("Number of hourly timestamps:", len(timestamps))
+    print("Coverage and array length checks passed.")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Download historical weather data from Open-Meteo."
+    )
+    parser.add_argument("--start-date", required=True, type=valid_date)
+    parser.add_argument("--end-date", required=True, type=valid_date)
+    args = parser.parse_args()
+    download_weather(args.start_date, args.end_date)
+
+
+if __name__ == "__main__":
+    main()
