@@ -1,252 +1,168 @@
-# NYC Mobility Pipeline — Raw Data Acquisition Checklist
+# Raw Data Acquisition Checklist
 
-## Purpose
-
-This checklist verifies that the raw datasets acquired for the NYC Mobility Pipeline are complete, readable, and suitable for the Bronze/raw stage before further processing.
-
-**Scope:** Raw data acquisition and verification only.
-**Deadline:** September 17, 2026 EOD (Asia/Manila)
+**Scope:** Local raw-data acquisition and verification  
+**Sources:** Green Taxi, Weather, Taxi Zones  
+**Verification Date:** September 16, 2026
 
 ---
 
-## 1. Expected Raw Sources
+## 1. Green Taxi — Parquet
 
-### A. Green Taxi Trip Records
+### File and Acquisition
+- [x] Expected March 2026 file exists
+- [x] Expected April 2026 file exists
+- [x] Expected May 2026 file exists
+- [x] Expected filenames verified
+- [x] Source URL recorded
+- [x] Retrieval metadata recorded
+- [x] File sizes recorded
+- [x] Raw files stored in the expected raw-data directory
+- [x] No credentials or secrets included
 
-**Source:** NYC Taxi & Limousine Commission (TLC)
+### Readability and File Integrity
+- [x] March Parquet file opened using Python
+- [x] April Parquet file opened using Python
+- [x] May Parquet file opened using Python
+- [x] Files are non-empty
+- [x] Files are readable as Parquet
+- [x] No obvious HTML/error-page content was saved as dataset content
 
-Expected coverage:
+### Schema and Content
+- [x] Required columns are present
+- [x] Column lists recorded
+- [x] Row counts recorded
+- [x] Pickup datetime values checked
+- [x] Expected monthly coverage checked
+- [x] Records outside the expected month reported
+- [x] Missing candidate-key values checked
+- [x] Duplicate candidate keys checked
+- [x] Findings recorded without modifying raw records
 
-* [ ] March 2026
-* [ ] April 2026
-* [ ] May 2026
+### Green Taxi Results
 
-Expected format:
+| Month | Rows | Missing Candidate Keys | Duplicate Candidate Keys | Rows Outside Expected Month |
+|---|---:|---:|---:|---:|
+| March 2026 | 44,208 | 0 | 112 | 9 |
+| April 2026 | 44,238 | 0 | 154 | 3 |
+| May 2026 | 44,921 | 0 | 118 | 10 |
 
-* [ ] Parquet
-
-Expected raw paths:
-
-* `data/raw/green_taxi/green_tripdata_2026-03.parquet`
-* `data/raw/green_taxi/green_tripdata_2026-04.parquet`
-* `data/raw/green_taxi/green_tripdata_2026-05.parquet`
-
-Verification:
-
-* [ ] File exists for each expected month
-* [ ] File is not empty
-* [ ] File can be opened successfully
-* [ ] File is valid Parquet
-* [ ] Required columns are present
-* [ ] Row count is recorded
-* [ ] Pickup date coverage is recorded
-* [ ] Duplicate/missing key indicators are recorded
-* [ ] Source URL is recorded in the acquisition inventory
-* [ ] Retrieval metadata is recorded in the acquisition inventory
-* [ ] File is not an HTML/error response saved with a `.parquet` extension
-
-**Status:** ☐ PASS ☐ FAIL ☐ PENDING
-
-**Findings/Notes:**
-
----
-
-### B. Historical Weather Data
-
-**Source:** Open-Meteo Historical Weather API
-
-Expected coverage:
-
-* [ ] March 2026
-* [ ] April 2026
-* [ ] May 2026
-
-Expected format:
-
-* [ ] JSON
-
-Expected raw paths:
-
-* `data/raw/weather/weather_2026-03-01_2026-03-31.json`
-* `data/raw/weather/weather_2026-04-01_2026-04-30.json`
-* `data/raw/weather/weather_2026-05-01_2026-05-31.json`
-
-Expected hourly fields:
-
-* `time`
-* `temperature_2m`
-* `precipitation`
-* `wind_speed_10m`
-
-Verification:
-
-* [ ] File exists for each expected month
-* [ ] Response is not empty
-* [ ] Response is valid JSON
-* [ ] `hourly` data is present
-* [ ] Expected weather fields are present
-* [ ] Each weather array matches the timestamp count
-* [ ] Expected date coverage is present
-* [ ] Duplicate/missing timestamp/date findings are recorded
-* [ ] API request parameters are recorded in metadata
-* [ ] Retrieval timestamp is recorded in metadata
-* [ ] Error response was not saved as valid data
-
-**Status:** ☐ PASS ☐ FAIL ☐ PENDING
-
-**Findings/Notes:**
+**Status:** PASS
 
 ---
 
-### C. Taxi Zones
+## 2. Weather — JSON / API
 
-**Source:** NYC Taxi & Limousine Commission (TLC)
+### File and Acquisition
+- [x] March 2026 response exists
+- [x] April 2026 response exists
+- [x] May 2026 response exists
+- [x] API/source URL recorded
+- [x] Retrieval metadata recorded
+- [x] Raw JSON files stored in the expected raw-data directory
+- [x] No credentials or secrets included
 
-Expected format:
+### Readability and File Integrity
+- [x] JSON responses opened using Python
+- [x] JSON responses are readable
+- [x] Responses are non-empty
+- [x] Expected hourly data is present
+- [x] No obvious API/error-page response was saved as raw data
 
-* [ ] CSV
+### Schema and Content
+- [x] Required weather fields are present
+- [x] Timestamp array is present
+- [x] Weather arrays have matching lengths
+- [x] Timestamps can be parsed
+- [x] Duplicate timestamps checked
+- [x] Required fields checked
+- [x] Monthly coverage verified
+- [x] Retrieval metadata verified
 
-Expected raw path:
+### Weather Results
 
-* `data/raw/taxi_zones/taxi_zone_lookup.csv`
+| Month | Hourly Positions | Missing Required Fields | Duplicate Timestamps |
+|---|---:|---:|---:|
+| March 2026 | 744 | 0 | 0 |
+| April 2026 | 720 | 0 | 0 |
+| May 2026 | 744 | 0 | 0 |
 
-Required columns:
+**Total hourly positions:** 2,208
 
-* `LocationID`
-* `Borough`
-* `Zone`
-
-Verification:
-
-* [ ] File exists
-* [ ] File is not empty
-* [ ] File can be opened successfully
-* [ ] File is valid CSV
-* [ ] Required columns are present
-* [ ] Row count is recorded
-* [ ] Duplicate/missing `LocationID` findings are recorded
-* [ ] Source URL is recorded
-* [ ] Retrieval metadata is recorded
-* [ ] File is not an HTML/error response saved as `.csv`
-
-**Status:** ☐ PASS ☐ FAIL ☐ PENDING
-
-**Findings/Notes:**
-
----
-
-## 2. File-Level Verification
-
-For every acquired raw file:
-
-* [ ] Expected file exists
-* [ ] Filename follows the expected naming convention
-* [ ] File size is greater than zero
-* [ ] File can be opened using the expected format reader
-* [ ] File contains records
-* [ ] File extension matches the actual content
-* [ ] File is not an HTML error page or other error response
-* [ ] Source URL is documented
-* [ ] Retrieval timestamp/metadata is documented
+**Status:** PASS
 
 ---
 
-## 3. Schema Verification
+## 3. Taxi Zones — CSV
 
-For each dataset:
+### File and Acquisition
+- [x] Expected CSV file exists
+- [x] Source URL recorded
+- [x] Retrieval metadata recorded
+- [x] File size recorded
+- [x] Raw CSV stored in the expected raw-data directory
+- [x] No credentials or secrets included
 
-* [ ] Actual columns were recorded
-* [ ] Required columns are present
-* [ ] Unexpected schema changes are documented
-* [ ] Data types can be read successfully
-* [ ] Schema issues are reported to the source owner
+### Readability and File Integrity
+- [x] CSV opened using Python
+- [x] CSV is readable
+- [x] CSV is non-empty
+- [x] No obvious error-page content was saved as CSV
 
-**Important:** Do not clean, delete, or modify raw records during this verification stage.
+### Schema and Content
+- [x] Required columns are present
+- [x] Column list recorded
+- [x] Row count recorded
+- [x] Missing `LocationID` values checked
+- [x] Duplicate `LocationID` values checked
 
----
+### Taxi Zones Results
 
-## 4. Record-Level Findings
+- [x] 265 rows verified
+- [x] 265 unique `LocationID`s verified
+- [x] Missing `LocationID`: 0
+- [x] Duplicate `LocationID`: 0
 
-Record findings without modifying the raw data.
-
-Check for:
-
-* [ ] Duplicate keys or duplicate timestamp indicators
-* [ ] Missing key values
-* [ ] Unexpected nulls in important fields
-* [ ] Unexpected date coverage
-* [ ] Unexpected row counts
-* [ ] Other obvious acquisition issues
-
-**Finding:**
-
-**Affected file/source:**
-
-**Evidence:**
-
-**Reported to source owner:** ☐ Yes ☐ No ☐ N/A
+**Status:** PASS
 
 ---
 
-## 5. Error and Incomplete Download Check
+## 4. Cross-Source Acquisition Checks
 
-A download should be considered failed or needing rerun if:
-
-* [ ] File is empty
-* [ ] File cannot be parsed
-* [ ] File contains an HTML/error response instead of the expected format
-* [ ] Expected date/month is missing
-* [ ] Expected columns are missing
-* [ ] Weather arrays do not match timestamp count
-* [ ] Download appears incomplete
-* [ ] Retrieval metadata/source URL is missing
-* [ ] Other acquisition error is observed
-
-When a failure is found:
-
-1. Record the failure and evidence.
-2. Notify the responsible source/acquisition owner.
-3. Ask the owner to rerun the acquisition script.
-4. Re-run verification after the corrected file is available.
+- [x] All required source datasets are present
+- [x] Green Taxi March–May 2026 coverage verified
+- [x] Weather March–May 2026 coverage verified
+- [x] Taxi Zones reference file verified
+- [x] Row counts recorded
+- [x] Columns recorded
+- [x] Source URLs recorded
+- [x] Retrieval metadata recorded
+- [x] Missing-key findings recorded
+- [x] Duplicate-key findings recorded
+- [x] Acquisition anomalies documented
+- [x] Raw records were not cleaned or deleted
+- [x] Raw datasets and credentials are excluded from Git
 
 ---
 
-## 6. Raw Data Inventory
+## 5. Source Owner Follow-Up
 
-| Source | Expected Period | Format | File | Rows | Status | Findings |
-| --- | --- | --- | --- | ---: | --- | --- |
-| Green Taxi | March 2026 | Parquet | `green_tripdata_2026-03.parquet` | TBD | PENDING | |
-| Green Taxi | April 2026 | Parquet | `green_tripdata_2026-04.parquet` | TBD | PENDING | |
-| Green Taxi | May 2026 | Parquet | `green_tripdata_2026-05.parquet` | TBD | PENDING | |
-| Weather | March 2026 | JSON | `weather_2026-03-01_2026-03-31.json` | TBD | PENDING | |
-| Weather | April 2026 | JSON | `weather_2026-04-01_2026-04-30.json` | TBD | PENDING | |
-| Weather | May 2026 | JSON | `weather_2026-05-01_2026-05-31.json` | TBD | PENDING | |
-| Taxi Zones | Reference data | CSV | `taxi_zone_lookup.csv` | TBD | PENDING | |
+- [x] Green Taxi findings identified
+- [x] Green Taxi source owner asked to rerun/check the acquisition script
+- [x] Owner asked to check for incomplete downloads
+- [x] Owner asked to check for unnecessary duplicate files
+- [ ] Owner rerun results documented, if applicable
 
 ---
 
-## 7. Final Acceptance
+## 6. Verification and Reproducibility
 
-A raw dataset can be marked **PASS** when:
+- [x] Verification script saved under `tests/`
+- [x] Exact run command documented
+- [x] Verification completed locally using Python
+- [x] Results recorded in the acquisition report
+- [x] Overall PASS/FAIL status recorded
 
-* [ ] Expected file/data is present
-* [ ] Expected coverage is present
-* [ ] File is non-empty and readable
-* [ ] Expected schema is available
-* [ ] Row count has been recorded
-* [ ] Duplicate/missing key findings have been recorded
-* [ ] Source URL is documented
-* [ ] Retrieval metadata is documented
-* [ ] No acquisition error was detected
+### Run Command
 
-### Overall Status
-
-**Raw Acquisition Verification:** ☐ PASS ☐ FAIL ☐ PENDING
-
-**Verified by:** @crisstin92-ui
-
-**Verification date:** __________
-
-**Summary:**
-
----
+```bash
+py tests/test_raw_files.py
