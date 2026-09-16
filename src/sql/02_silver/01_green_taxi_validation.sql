@@ -1,0 +1,5 @@
+-- TEMPLATE: enable after silver_green_taxi_trips is implemented.
+-- Validate row reconciliation, trip_key uniqueness, required keys, date scope,
+-- duration flags, distance/fare flags, and source lineage.
+--
+-- SELECT COUNT(*) FROM nyc_mobility.nyc_silver.silver_green_taxi_trips;

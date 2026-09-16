@@ -1,0 +1,3 @@
+-- TEMPLATE: enable after gold_mobility_hourly_zone is implemented.
+-- Validate uniqueness of pickup_hour_local + pu_location_id and reconcile the
+-- sum of trip_count to eligible Silver trips.
