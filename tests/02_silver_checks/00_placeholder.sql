@@ -1,0 +1,4 @@
+-- PLACEHOLDER
+-- Replace with executable Silver acceptance checks only after #29, #30, and #31
+-- define the final reviewed table schemas. A passing check should return zero
+-- unexpected rows or one clearly labeled summary row.

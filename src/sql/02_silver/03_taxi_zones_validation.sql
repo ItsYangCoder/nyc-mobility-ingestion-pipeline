@@ -1,0 +1,5 @@
+-- TEMPLATE: enable after silver_taxi_zones is implemented.
+-- Validate 265 rows, unique non-null location_id, trimmed attributes,
+-- valid 264/265 members, and pickup/dropoff join compatibility.
+--
+-- SELECT COUNT(*) FROM nyc_mobility.nyc_silver.silver_taxi_zones;

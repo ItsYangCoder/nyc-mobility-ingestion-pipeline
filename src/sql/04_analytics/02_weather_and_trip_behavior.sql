@@ -1,0 +1,4 @@
+-- TEMPLATE — Business question 2
+-- How does weather affect taxi demand and trip behavior?
+-- Compare trip volume and at least one of duration, distance, or fares across
+-- documented weather conditions without implying unsupported causality.
