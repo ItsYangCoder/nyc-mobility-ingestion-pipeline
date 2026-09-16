@@ -199,7 +199,5 @@ def main() -> int:
         output_dir=args.output_dir,
         inventory_path=args.inventory_path,
     )
-
-
 if __name__ == "__main__":
     raise SystemExit(main())

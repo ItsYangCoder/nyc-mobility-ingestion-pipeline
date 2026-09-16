@@ -60,8 +60,6 @@ def validate_weather(data: object) -> dict:
             )
 
     return hourly
-
-
 def load_existing_weather(filename: Path) -> dict | None:
     """Reuse an existing raw file only after it passes validation."""
     if not filename.exists():

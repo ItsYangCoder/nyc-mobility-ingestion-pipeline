@@ -1,215 +1,212 @@
-# Raw Data Acquisition & Verification Report
+# Raw Data Acquisition Verification Report
 
-## 1. Purpose
-
-This report documents the acquisition and local verification of the raw datasets required for the NYC Mobility Ingestion Pipeline.
-
-The verification focuses on:
-
-* File existence and completeness
-* File readability
-* Expected file formats
-* Expected schema/columns
-* Date coverage
-* Row counts
-* Duplicate and missing key indicators
-* Detection of HTML/error responses saved as data
-* Source and retrieval metadata
-
-**Raw records are not cleaned, transformed, or deleted during verification.**
+**Owner:** @crisstin92-ui  
+**Verification Date:** September 16, 2026  
+**Scope:** Local raw-data acquisition and verification  
+**Sources:** Green Taxi, Weather, Taxi Zones
 
 ---
 
-## 2. Required Raw Datasets
+## 1. Objective
 
-| Dataset | Expected Coverage | Format | Expected Raw File | Status |
-| --- | --- | --- | --- | --- |
-| Green Taxi | March 2026 | Parquet | `green_tripdata_2026-03.parquet` | NOT VERIFIED |
-| Green Taxi | April 2026 | Parquet | `green_tripdata_2026-04.parquet` | NOT VERIFIED |
-| Green Taxi | May 2026 | Parquet | `green_tripdata_2026-05.parquet` | NOT VERIFIED |
-| Open-Meteo Weather | March 2026 | JSON | `weather_2026-03-01_2026-03-31.json` | NOT VERIFIED |
-| Open-Meteo Weather | April 2026 | JSON | `weather_2026-04-01_2026-04-30.json` | NOT VERIFIED |
-| Open-Meteo Weather | May 2026 | JSON | `weather_2026-05-01_2026-05-31.json` | NOT VERIFIED |
-| Taxi Zones | Reference data | CSV | `taxi_zone_lookup.csv` | NOT VERIFIED |
+This report documents the local verification of the required raw datasets for the NYC mobility ingestion pipeline.
+
+The verification covers file availability, readability, non-empty content, expected date coverage, schema, row counts, missing and duplicate keys, source URLs, and retrieval metadata.
+
+Raw records were not cleaned, deleted, or modified during verification.
+
+---
+
+## 2. Verification Summary
+
+| Source | Format | Coverage | Rows / Records | Missing | Duplicates | Status |
+|---|---|---|---:|---:|---:|---|
+| Green Taxi | Parquet | Mar–May 2026 | 133,367 | 0 | Candidate-key duplicates found | PASS |
+| Weather | JSON/API | Mar–May 2026 | 2,208 hourly positions | 0 | 0 | PASS |
+| Taxi Zones | CSV | Reference | 265 | 0 | 0 | PASS |
 
 ---
 
 ## 3. Green Taxi Verification
 
-### March 2026
+### Files Verified
 
-* File exists: NOT VERIFIED
-* File is non-empty: NOT VERIFIED
-* Parquet is readable: NOT VERIFIED
-* Required columns present: NOT VERIFIED
-* Row count recorded: NOT VERIFIED
-* Pickup date coverage verified: NOT VERIFIED
-* Duplicate key indicators checked: NOT VERIFIED
-* Missing key values checked: NOT VERIFIED
-* Source URL recorded: NOT VERIFIED
-* Retrieval metadata recorded: NOT VERIFIED
+- March 2026 Green Taxi Parquet
+- April 2026 Green Taxi Parquet
+- May 2026 Green Taxi Parquet
 
-**Status: NOT VERIFIED**
+### Results
 
-### April 2026
+| Month | Rows | Missing Candidate Keys | Duplicate Candidate Keys | Rows Outside Expected Month |
+|---|---:|---:|---:|---:|
+| March 2026 | 44,208 | 0 | 112 | 9 |
+| April 2026 | 44,238 | 0 | 154 | 3 |
+| May 2026 | 44,921 | 0 | 118 | 10 |
 
-* File exists: NOT VERIFIED
-* File is non-empty: NOT VERIFIED
-* Parquet is readable: NOT VERIFIED
-* Required columns present: NOT VERIFIED
-* Row count recorded: NOT VERIFIED
-* Pickup date coverage verified: NOT VERIFIED
-* Duplicate key indicators checked: NOT VERIFIED
-* Missing key values checked: NOT VERIFIED
-* Source URL recorded: NOT VERIFIED
-* Retrieval metadata recorded: NOT VERIFIED
+**Total rows:** 133,367
 
-**Status: NOT VERIFIED**
+### Verification Findings
 
-### May 2026
+- All expected monthly files were present.
+- All Parquet files were readable.
+- All files were non-empty.
+- Required columns were present.
+- Pickup datetime values were checked.
+- Expected monthly coverage was checked.
+- No missing candidate-key rows were found.
+- Duplicate candidate keys were recorded as findings.
+- Rows outside the expected monthly coverage were recorded as findings.
+- Raw records were not cleaned or deleted.
 
-* File exists: NOT VERIFIED
-* File is non-empty: NOT VERIFIED
-* Parquet is readable: NOT VERIFIED
-* Required columns present: NOT VERIFIED
-* Row count recorded: NOT VERIFIED
-* Pickup date coverage verified: NOT VERIFIED
-* Duplicate key indicators checked: NOT VERIFIED
-* Missing key values checked: NOT VERIFIED
-* Source URL recorded: NOT VERIFIED
-* Retrieval metadata recorded: NOT VERIFIED
+### Duplicate Key Note
 
-**Status: NOT VERIFIED**
+The duplicate counts above refer to the selected **candidate key**, not exact full-row duplicates.
+
+Therefore, these findings do not necessarily indicate exact duplicate records. A separate Bronze profiling check found no exact full-row duplicates.
+
+### Owner Follow-Up
+
+The Green Taxi source owner was asked to rerun/check the acquisition process and verify whether the observed out-of-month records and candidate-key duplicates are expected or related to incomplete/unnecessary duplicate downloads.
 
 ---
 
-## 4. Open-Meteo Weather Verification
+## 4. Weather Verification
 
-### March 2026
+### Files / Responses Verified
 
-* JSON file exists: NOT VERIFIED
-* File is non-empty: NOT VERIFIED
-* JSON is valid/readable: NOT VERIFIED
-* `hourly` data present: NOT VERIFIED
-* Required weather fields present: NOT VERIFIED
-* Weather array lengths match timestamps: NOT VERIFIED
-* Date coverage verified: NOT VERIFIED
-* Duplicate timestamps checked: NOT VERIFIED
-* Missing dates checked: NOT VERIFIED
-* API request parameters recorded: NOT VERIFIED
-* Retrieval timestamp recorded: NOT VERIFIED
+- March 2026
+- April 2026
+- May 2026
 
-**Status: NOT VERIFIED**
+### Results
 
-### April 2026
+| Month | Hourly Positions | Missing Required Fields | Duplicate Timestamps |
+|---|---:|---:|---:|
+| March 2026 | 744 | 0 | 0 |
+| April 2026 | 720 | 0 | 0 |
+| May 2026 | 744 | 0 | 0 |
 
-* JSON file exists: NOT VERIFIED
-* File is non-empty: NOT VERIFIED
-* JSON is valid/readable: NOT VERIFIED
-* `hourly` data present: NOT VERIFIED
-* Required weather fields present: NOT VERIFIED
-* Weather array lengths match timestamps: NOT VERIFIED
-* Date coverage verified: NOT VERIFIED
-* Duplicate timestamps checked: NOT VERIFIED
-* Missing dates checked: NOT VERIFIED
-* API request parameters recorded: NOT VERIFIED
-* Retrieval timestamp recorded: NOT VERIFIED
+**Total hourly positions:** 2,208
 
-**Status: NOT VERIFIED**
+### Verification Findings
 
-### May 2026
+- All three monthly responses were present.
+- JSON responses were readable.
+- Responses were non-empty.
+- Required weather fields were present.
+- Weather arrays had matching lengths.
+- Timestamps were parseable.
+- No duplicate timestamps were found.
+- March–May 2026 coverage was verified.
+- Source and retrieval metadata were recorded.
 
-* JSON file exists: NOT VERIFIED
-* File is non-empty: NOT VERIFIED
-* JSON is valid/readable: NOT VERIFIED
-* `hourly` data present: NOT VERIFIED
-* Required weather fields present: NOT VERIFIED
-* Weather array lengths match timestamps: NOT VERIFIED
-* Date coverage verified: NOT VERIFIED
-* Duplicate timestamps checked: NOT VERIFIED
-* Missing dates checked: NOT VERIFIED
-* API request parameters recorded: NOT VERIFIED
-* Retrieval timestamp recorded: NOT VERIFIED
-
-**Status: NOT VERIFIED**
+**Status:** PASS
 
 ---
 
-## 5. NYC Taxi Zones Verification
+## 5. Taxi Zones Verification
 
-* CSV file exists: NOT VERIFIED
-* File is non-empty: NOT VERIFIED
-* CSV is readable: NOT VERIFIED
-* Required columns present: NOT VERIFIED
-* Row count recorded: NOT VERIFIED
-* `LocationID` duplicates checked: NOT VERIFIED
-* Missing `LocationID` checked: NOT VERIFIED
-* Source URL recorded: NOT VERIFIED
-* Retrieval timestamp recorded: NOT VERIFIED
-* Error response detection completed: NOT VERIFIED
+### File Verified
 
-**Status: NOT VERIFIED**
+- `taxi_zone_lookup.csv`
 
----
+### Results
 
-## 6. Findings
+- **Rows:** 265
+- **Unique `LocationID`s:** 265
+- **Missing `LocationID`:** 0
+- **Duplicate `LocationID`:** 0
 
-No final findings have been recorded yet because the required raw datasets have not been verified locally.
+### Verification Findings
 
-Once acquisition is complete, findings should include:
+- CSV was present and readable.
+- File was non-empty.
+- Required columns were present.
+- `LocationID` completeness was verified.
+- `LocationID` uniqueness was verified.
+- Source URL and retrieval metadata were recorded.
 
-* Missing files
-* Unexpected duplicate records/keys or timestamps
-* Missing key values or dates
-* Unexpected row counts
-* Schema differences
-* Unreadable/corrupted files
-* HTML/error responses saved instead of the expected dataset
-* Incomplete date coverage
-* Missing acquisition metadata
-
-These findings will be reported to the corresponding source owner for rerun or correction.
+**Status:** PASS
 
 ---
 
-## 7. Failure Handling
+## 6. Retrieval Metadata and Source Inventory
 
-If a dataset fails verification:
+The acquisition outputs include source/retrieval metadata where applicable.
 
-1. Record the failed check and supporting evidence.
-2. Notify the corresponding source/acquisition owner.
-3. Request a rerun or correction of the acquisition process.
-4. Re-run the local verification checks.
-5. Update this report with the final result.
+The Green Taxi inventory records:
 
-Raw records will not be manually cleaned or deleted as part of acquisition verification.
+- source URL
+- local filename
+- file size
+- row count
+- columns
+- retrieval timestamp
+
+Weather outputs include source/API and retrieval metadata.
+
+Taxi Zones includes source and retrieval metadata.
+
+The accepted file inventory is represented by:
+
+`docs/green_taxi_inventory.csv`
 
 ---
 
-## 8. Verification Command
+## 7. Raw-Data Quality Findings
 
-Run the automated raw-data checker from the project root:
+The verification identified the following findings:
+
+### Green Taxi
+
+- March: 9 rows outside the expected month
+- April: 3 rows outside the expected month
+- May: 10 rows outside the expected month
+- Candidate-key duplicates:
+  - March: 112
+  - April: 154
+  - May: 118
+- Missing candidate-key rows: 0
+
+These findings were recorded only. No raw records were cleaned or deleted.
+
+### Context from Bronze Profiling
+
+A separate Bronze profiling check reported:
+
+- Green Taxi: 133,367 rows
+- No exact full-row duplicates
+- 11 Green Taxi pickups before March 2026
+- Maximum `trip_distance`: 111,005.95
+- 384 negative fare rows
+- 391 negative total amount rows
+- All PU/DO LocationIDs resolve to Taxi Zones
+- Weather: 3 monthly responses and 2,208 aligned hourly positions
+- Taxi Zones: 265 rows and 265 unique `LocationID`s
+
+These Bronze findings are downstream profiling results and are not used to modify the raw datasets.
+
+---
+
+## 8. Error / Download Verification
+
+The required raw files were successfully opened and profiled locally.
+
+No obvious HTML/error-page content was detected in the verified dataset outputs.
+
+No incomplete download was confirmed from the current checks.
+
+Green Taxi anomalies were reported to the source owner for rerun/review as required.
+
+---
+
+## 9. Reproducibility
+
+### Verification Script
+
+`tests/test_raw_files.py`
+
+### Run Command
 
 ```bash
-python tests/test_raw_files.py
-```
-
-The checker is intended to be run after the required raw datasets have been acquired.
-
----
-
-## 9. Final Acceptance Criteria
-
-The raw-data acquisition is considered ready for the next pipeline stage when:
-
-* All required datasets are present.
-* Files are non-empty and readable.
-* File formats match expectations.
-* Required columns are present.
-* Required date coverage is complete.
-* Duplicate/missing key findings have been recorded.
-* No HTML/error response has been saved as a dataset.
-* Source URLs and retrieval metadata are documented.
-* Any acquisition failures have been resolved or explicitly reported.
-
-**Overall Status: NOT VERIFIED — awaiting raw-data acquisition.**
+py tests/test_raw_files.py
