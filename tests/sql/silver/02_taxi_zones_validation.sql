@@ -47,6 +47,7 @@ silver AS (
             _source_file IS NULL
             OR _source_file_modified_at IS NULL
             OR _ingested_at IS NULL
+            OR silver_processed_at IS NULL
         ) AS missing_lineage_rows,
         COUNT_IF(
             location_id IN (c.unknown_zone_id, c.outside_zone_id)
