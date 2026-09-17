@@ -348,3 +348,20 @@ The pipeline is accepted only when the following checks return evidence, not onl
 - NYC DOT traffic advisories are optional and excluded from the required model.
 - Silver and Gold implementations must still provide Databricks run evidence before this contract can be marked complete.
 - Exact TLC labels for trip distance and currency must be confirmed from the source documentation before final consumer-facing release.
+
+
+## 14. Physical Gold implementation
+
+The approved fact constellation is implemented under
+`src/nyc_mobility/transformations/gold/`.
+
+| Object | Implementation file |
+|---|---|
+| `dim_date` | `gold/dimensions/dim_date.py` |
+| `dim_hour` | `gold/dimensions/dim_hour.py` |
+| `dim_zone` | `gold/dimensions/dim_zone.py` |
+| `fact_taxi_trip` | `gold/facts/fact_taxi_trip.py` |
+| `fact_weather_hourly` | `gold/facts/fact_weather_hourly.py` |
+
+The physical structure separates dimensions from facts while keeping both under
+the Gold layer. SQL acceptance checks remain under `tests/sql/gold/`.
