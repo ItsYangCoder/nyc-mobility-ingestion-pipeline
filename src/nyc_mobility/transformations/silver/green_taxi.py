@@ -55,7 +55,14 @@ SOURCE_RECORD_COLS = [
 @dp.expect("dropoff_timestamp_present", "dropoff_ts_local IS NOT NULL")
 @dp.expect("pickup_location_present", "pu_location_id IS NOT NULL")
 @dp.expect("dropoff_location_present", "do_location_id IS NOT NULL")
-@dp.expect("source_lineage_present", "source_file IS NOT NULL AND ingested_at IS NOT NULL")
+@dp.expect(
+    "source_lineage_present",
+    """
+    source_file IS NOT NULL
+    AND source_file_modified_at IS NOT NULL
+    AND ingested_at IS NOT NULL
+    """,
+)
 def silver_green_taxi_trips():
     df = spark.read.table(BRONZE_TABLE)
 
@@ -81,7 +88,9 @@ def silver_green_taxi_trips():
         F.col("trip_type").cast("long").alias("trip_type"),
         F.col("congestion_surcharge").cast("double").alias("congestion_surcharge"),
         F.col("_source_file").alias("source_file"),
+        F.col("_source_file_modified_at").alias("source_file_modified_at"),
         F.col("_ingested_at").alias("ingested_at"),
+        F.current_timestamp().alias("silver_processed_at"),
     )
 
     df = (
@@ -158,5 +167,7 @@ def silver_green_taxi_trips():
         "is_valid_fare",
         "is_valid_total",
         "source_file",
+        "source_file_modified_at",
         "ingested_at",
+        "silver_processed_at",
     )

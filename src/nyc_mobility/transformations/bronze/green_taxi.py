@@ -25,6 +25,9 @@ def bronze_green_taxi_raw():
         .select(
             "*",
             F.col("_metadata.file_path").alias("_source_file"),
+            F.col("_metadata.file_modification_time").alias(
+                "_source_file_modified_at"
+            ),
             F.current_timestamp().alias("_ingested_at"),
         )
     )
