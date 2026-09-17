@@ -1,10 +1,11 @@
 # Tests
 
-- `unit/`: local Python unit tests
-- `integration/`: raw-file and acquisition integration tests
-- `01_source_checks/`: Databricks SQL checks for landed/Bronze sources
-- `02_silver_checks/`: Silver contract and reconciliation templates
-- `03_gold_checks/`: Gold grain, join, and reconciliation templates
-- `04_business_checks/`: analytics acceptance templates
+- `unit/`: offline Python unit tests
+- `integration/`: acquisition and pipeline integration tests
+- `sql/bronze/`: Bronze counts and lineage checks
+- `sql/silver/`: Silver contract and reconciliation checks
+- `sql/gold/`: Gold grain, relationship, and reconciliation checks
+- `04_business_checks/`: business acceptance checks
 
-Run local Python tests with `pytest -q`. SQL checks run in Databricks only after their upstream tables exist.
+Run Python tests with `pytest -q`. Run SQL checks in Databricks after their
+upstream tables exist. Placeholder SQL should not be committed.

@@ -1,2 +1,0 @@
--- PLACEHOLDER
--- Replace after #38 defines the reviewed Gold schema. Do not guess table fields.
