@@ -6,264 +6,301 @@
 -- WEATHER SILVER VALIDATION
 -- ============================================================
 
+CREATE MATERIALIZED VIEW weather_silver_quality_validation
+COMMENT 'Consolidated data quality validation for silver_weather_hourly'
+AS
 
--- 1. BASIC SUMMARY
+WITH base AS (
+    SELECT *
+    FROM silver_weather_hourly
+),
 
-SELECT
-    COUNT(*) AS total_rows,
-    COUNT(DISTINCT weather_hour_local) AS unique_weather_hours,
-    MIN(weather_hour_local) AS first_weather_hour,
-    MAX(weather_hour_local) AS last_weather_hour
-FROM nyc_mobility.nyc_silver.silver_weather_hourly;
+summary AS (
+    SELECT
+        COUNT(*) AS total_rows,
+        COUNT(DISTINCT weather_hour_local) AS unique_weather_hours,
 
+        COUNT(*)
+            - COUNT(DISTINCT weather_hour_local)
+            AS duplicate_hour_rows,
 
--- 2. DUPLICATE WEATHER HOURS
--- Expected: 0 rows
+        SUM(
+            CASE
+                WHEN weather_hour_local IS NULL
+                THEN 1 ELSE 0
+            END
+        ) AS weather_hour_nulls,
 
-SELECT
-    weather_hour_local,
-    COUNT(*) AS duplicate_count
-FROM nyc_mobility.nyc_silver.silver_weather_hourly
-GROUP BY weather_hour_local
-HAVING COUNT(*) > 1
-ORDER BY weather_hour_local;
+        SUM(
+            CASE
+                WHEN weather_date_local IS NULL
+                THEN 1 ELSE 0
+            END
+        ) AS weather_date_nulls,
 
+        SUM(
+            CASE
+                WHEN timezone IS NULL
+                THEN 1 ELSE 0
+            END
+        ) AS timezone_nulls,
 
--- 3. REQUIRED NULL CHECK
--- Expected: all 0
+        SUM(
+            CASE
+                WHEN source_file IS NULL
+                THEN 1 ELSE 0
+            END
+        ) AS source_file_nulls,
 
-SELECT
-    SUM(
-        CASE WHEN weather_hour_local IS NULL
-        THEN 1 ELSE 0 END
-    ) AS weather_hour_nulls,
+        SUM(
+            CASE
+                WHEN ingested_at IS NULL
+                THEN 1 ELSE 0
+            END
+        ) AS ingested_at_nulls,
 
-    SUM(
-        CASE WHEN weather_date_local IS NULL
-        THEN 1 ELSE 0 END
-    ) AS weather_date_nulls,
+        SUM(
+            CASE
+                WHEN temperature_2m_c IS NULL
+                THEN 1 ELSE 0
+            END
+        ) AS temperature_nulls,
 
-    SUM(
-        CASE WHEN timezone IS NULL
-        THEN 1 ELSE 0 END
-    ) AS timezone_nulls,
+        SUM(
+            CASE
+                WHEN precipitation_mm IS NULL
+                THEN 1 ELSE 0
+            END
+        ) AS precipitation_nulls,
 
-    SUM(
-        CASE WHEN source_file IS NULL
-        THEN 1 ELSE 0 END
-    ) AS source_file_nulls,
+        SUM(
+            CASE
+                WHEN wind_speed_10m_kmh IS NULL
+                THEN 1 ELSE 0
+            END
+        ) AS wind_speed_nulls,
 
-    SUM(
-        CASE WHEN ingested_at IS NULL
-        THEN 1 ELSE 0 END
-    ) AS ingested_at_nulls
+        SUM(
+            CASE
+                WHEN precipitation_mm < 0
+                THEN 1 ELSE 0
+            END
+        ) AS negative_precipitation_rows,
 
-FROM nyc_mobility.nyc_silver.silver_weather_hourly;
+        SUM(
+            CASE
+                WHEN wind_speed_10m_kmh < 0
+                THEN 1 ELSE 0
+            END
+        ) AS negative_wind_rows,
 
+        SUM(
+            CASE
+                WHEN temperature_2m_c < -50
+                  OR temperature_2m_c > 60
+                THEN 1 ELSE 0
+            END
+        ) AS suspicious_temperature_rows,
 
--- 4. MEASUREMENT NULL CHECK
+        SUM(
+            CASE
+                WHEN wind_speed_10m_kmh > 250
+                THEN 1 ELSE 0
+            END
+        ) AS suspicious_wind_rows,
 
-SELECT
-    SUM(
-        CASE WHEN temperature_2m_c IS NULL
-        THEN 1 ELSE 0 END
-    ) AS temperature_nulls,
+        SUM(
+            CASE
+                WHEN timezone <> 'America/New_York'
+                THEN 1 ELSE 0
+            END
+        ) AS unexpected_timezone_rows,
 
-    SUM(
-        CASE WHEN precipitation_mm IS NULL
-        THEN 1 ELSE 0 END
-    ) AS precipitation_nulls,
+        SUM(
+            CASE
+                WHEN weather_date_local < DATE '2026-03-01'
+                  OR weather_date_local > DATE '2026-05-31'
+                THEN 1 ELSE 0
+            END
+        ) AS outside_analysis_period_rows,
 
-    SUM(
-        CASE WHEN wind_speed_10m_kmh IS NULL
-        THEN 1 ELSE 0 END
-    ) AS wind_speed_nulls
+        SUM(
+            CASE
+                WHEN weather_date_local
+                     <> CAST(weather_hour_local AS DATE)
+                THEN 1 ELSE 0
+            END
+        ) AS date_timestamp_mismatch_rows,
 
-FROM nyc_mobility.nyc_silver.silver_weather_hourly;
+        SUM(
+            CASE
+                WHEN ingested_at < weather_hour_local
+                THEN 1 ELSE 0
+            END
+        ) AS invalid_ingestion_timestamp_rows,
 
+        MIN(weather_hour_local)
+            AS first_weather_hour,
 
--- 5. TIMEZONE CHECK
--- Expected: America/New_York only
+        MAX(weather_hour_local)
+            AS last_weather_hour,
 
-SELECT
-    timezone,
-    COUNT(*) AS row_count
-FROM nyc_mobility.nyc_silver.silver_weather_hourly
-GROUP BY timezone
-ORDER BY timezone;
+        COUNT(DISTINCT source_file)
+            AS source_file_count
 
+    FROM base
+),
 
--- 6. MONTHLY COVERAGE
+monthly AS (
+    SELECT
+        SUM(
+            CASE
+                WHEN DATE_FORMAT(
+                    weather_hour_local,
+                    'yyyy-MM'
+                ) = '2026-03'
+                THEN 1 ELSE 0
+            END
+        ) AS march_rows,
 
-SELECT
-    DATE_FORMAT(
-        weather_hour_local,
-        'yyyy-MM'
-    ) AS month,
+        SUM(
+            CASE
+                WHEN DATE_FORMAT(
+                    weather_hour_local,
+                    'yyyy-MM'
+                ) = '2026-04'
+                THEN 1 ELSE 0
+            END
+        ) AS april_rows,
 
-    COUNT(*) AS row_count,
+        SUM(
+            CASE
+                WHEN DATE_FORMAT(
+                    weather_hour_local,
+                    'yyyy-MM'
+                ) = '2026-05'
+                THEN 1 ELSE 0
+            END
+        ) AS may_rows
 
-    COUNT(
-        DISTINCT weather_hour_local
-    ) AS unique_hours
+    FROM base
+),
 
-FROM nyc_mobility.nyc_silver.silver_weather_hourly
+source_overlap AS (
+    SELECT
+        COUNT(*) AS overlapping_weather_hours
 
-GROUP BY
-    DATE_FORMAT(
-        weather_hour_local,
-        'yyyy-MM'
+    FROM (
+        SELECT
+            weather_hour_local
+
+        FROM base
+
+        GROUP BY weather_hour_local
+
+        HAVING COUNT(DISTINCT source_file) > 1
+    )
+),
+
+hourly_gaps AS (
+    SELECT
+        COUNT(*) AS unexpected_hour_gaps
+
+    FROM (
+        SELECT
+            weather_hour_local,
+
+            LAG(weather_hour_local) OVER (
+                ORDER BY weather_hour_local
+            ) AS previous_weather_hour
+
+        FROM base
     )
 
-ORDER BY month;
+    WHERE previous_weather_hour IS NOT NULL
 
-
--- 7. ROWS OUTSIDE PROJECT PERIOD
--- Expected: 0 rows
-
-SELECT *
-FROM nyc_mobility.nyc_silver.silver_weather_hourly
-WHERE weather_date_local < DATE '2026-03-01'
-   OR weather_date_local > DATE '2026-05-31'
-ORDER BY weather_hour_local;
-
-
--- 8. SOURCE LINEAGE
-
-SELECT
-    source_file,
-    COUNT(*) AS row_count,
-    MIN(weather_hour_local) AS first_weather_hour,
-    MAX(weather_hour_local) AS last_weather_hour,
-    MIN(ingested_at) AS first_ingested_at,
-    MAX(ingested_at) AS last_ingested_at
-FROM nyc_mobility.nyc_silver.silver_weather_hourly
-GROUP BY source_file
-ORDER BY first_weather_hour;
-
-
--- 9. OVERLAPPING SOURCE FILES
--- Expected: 0 rows
-
-SELECT
-    weather_hour_local,
-    COUNT(DISTINCT source_file) AS source_file_count,
-    COLLECT_SET(source_file) AS source_files
-FROM nyc_mobility.nyc_silver.silver_weather_hourly
-GROUP BY weather_hour_local
-HAVING COUNT(DISTINCT source_file) > 1
-ORDER BY weather_hour_local;
-
-
--- 10. INVALID PRECIPITATION
--- Expected: 0 rows
-
-SELECT
-    weather_hour_local,
-    precipitation_mm,
-    source_file
-FROM nyc_mobility.nyc_silver.silver_weather_hourly
-WHERE precipitation_mm < 0
-ORDER BY weather_hour_local;
-
-
--- 11. INVALID WIND SPEED
--- Expected: 0 rows
-
-SELECT
-    weather_hour_local,
-    wind_speed_10m_kmh,
-    source_file
-FROM nyc_mobility.nyc_silver.silver_weather_hourly
-WHERE wind_speed_10m_kmh < 0
-ORDER BY weather_hour_local;
-
-
--- 12. HOURLY GAP DIAGNOSTIC
--- Review results carefully because DST applies to America/New_York.
-
-WITH ordered_weather AS (
-    SELECT
-        weather_hour_local,
-
-        LAG(weather_hour_local) OVER (
-            ORDER BY weather_hour_local
-        ) AS previous_weather_hour
-
-    FROM nyc_mobility.nyc_silver.silver_weather_hourly
+      AND TIMESTAMPDIFF(
+            MINUTE,
+            previous_weather_hour,
+            weather_hour_local
+          ) <> 60
 )
 
 SELECT
-    previous_weather_hour,
-    weather_hour_local,
+    s.total_rows,
+    s.unique_weather_hours,
+    s.duplicate_hour_rows,
 
-    TIMESTAMPDIFF(
-        MINUTE,
-        previous_weather_hour,
-        weather_hour_local
-    ) AS minute_difference
+    s.weather_hour_nulls,
+    s.weather_date_nulls,
+    s.timezone_nulls,
+    s.source_file_nulls,
+    s.ingested_at_nulls,
 
-FROM ordered_weather
+    s.temperature_nulls,
+    s.precipitation_nulls,
+    s.wind_speed_nulls,
 
-WHERE previous_weather_hour IS NOT NULL
-  AND TIMESTAMPDIFF(
-        MINUTE,
-        previous_weather_hour,
-        weather_hour_local
-      ) <> 60
+    s.negative_precipitation_rows,
+    s.negative_wind_rows,
 
-ORDER BY weather_hour_local;
+    s.suspicious_temperature_rows,
+    s.suspicious_wind_rows,
 
+    s.unexpected_timezone_rows,
+    s.outside_analysis_period_rows,
+    s.date_timestamp_mismatch_rows,
+    s.invalid_ingestion_timestamp_rows,
 
--- 13. FINAL VALIDATION SUMMARY
+    m.march_rows,
+    m.april_rows,
+    m.may_rows,
 
-SELECT
-    COUNT(*) AS total_rows,
+    o.overlapping_weather_hours,
 
-    COUNT(
-        DISTINCT weather_hour_local
-    ) AS unique_weather_hours,
+    g.unexpected_hour_gaps,
 
-    COUNT(*)
-        - COUNT(DISTINCT weather_hour_local)
-        AS duplicate_hour_rows,
+    s.first_weather_hour,
+    s.last_weather_hour,
+    s.source_file_count,
 
-    SUM(
-        CASE WHEN weather_hour_local IS NULL
-        THEN 1 ELSE 0 END
-    ) AS weather_hour_nulls,
+    CASE
+        WHEN s.total_rows = 2208
+         AND s.unique_weather_hours = 2208
+         AND s.duplicate_hour_rows = 0
 
-    SUM(
-        CASE WHEN timezone IS NULL
-        THEN 1 ELSE 0 END
-    ) AS timezone_nulls,
+         AND s.weather_hour_nulls = 0
+         AND s.weather_date_nulls = 0
+         AND s.timezone_nulls = 0
+         AND s.source_file_nulls = 0
+         AND s.ingested_at_nulls = 0
 
-    SUM(
-        CASE WHEN source_file IS NULL
-        THEN 1 ELSE 0 END
-    ) AS source_file_nulls,
+         AND s.temperature_nulls = 0
+         AND s.precipitation_nulls = 0
+         AND s.wind_speed_nulls = 0
 
-    SUM(
-        CASE WHEN ingested_at IS NULL
-        THEN 1 ELSE 0 END
-    ) AS ingested_at_nulls,
+         AND s.negative_precipitation_rows = 0
+         AND s.negative_wind_rows = 0
 
-    SUM(
-        CASE WHEN precipitation_mm < 0
-        THEN 1 ELSE 0 END
-    ) AS negative_precipitation_rows,
+         AND s.unexpected_timezone_rows = 0
+         AND s.outside_analysis_period_rows = 0
+         AND s.date_timestamp_mismatch_rows = 0
+         AND s.invalid_ingestion_timestamp_rows = 0
 
-    SUM(
-        CASE WHEN wind_speed_10m_kmh < 0
-        THEN 1 ELSE 0 END
-    ) AS negative_wind_rows,
+         AND m.march_rows = 744
+         AND m.april_rows = 720
+         AND m.may_rows = 744
 
-    MIN(weather_hour_local) AS first_weather_hour,
+         AND o.overlapping_weather_hours = 0
 
-    MAX(weather_hour_local) AS last_weather_hour,
+         AND s.source_file_count = 3
 
-    COUNT(
-        DISTINCT source_file
-    ) AS source_file_count
+        THEN 'PASS'
+        ELSE 'FAIL'
+    END AS overall_validation_status
 
-FROM nyc_mobility.nyc_silver.silver_weather_hourly;
+FROM summary s
+
+CROSS JOIN monthly m
+CROSS JOIN source_overlap o
+CROSS JOIN hourly_gaps g;
