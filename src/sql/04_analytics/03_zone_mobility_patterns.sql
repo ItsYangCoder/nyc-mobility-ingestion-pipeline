@@ -1,4 +1,0 @@
--- TEMPLATE — Business question 3
--- Which areas show the strongest mobility patterns or opportunities?
--- Compare pickup/drop-off activity, longer trips, or fare activity by area,
--- time, and weather.
