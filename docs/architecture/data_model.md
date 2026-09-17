@@ -25,7 +25,19 @@ Evidence is recorded in:
 - [Raw acquisition report](../evidence/raw_acquisition_report.md)
 - [Raw acquisition checklist](../evidence/raw_acquisition_checklist.md)
 
-## 2. Layer contracts
+## 2. Catalog and schema contract
+
+The official Databricks namespaces confirmed by the team are:
+
+| Layer | Catalog / schema |
+|---|---|
+| Bronze | `nyc_bronze` |
+| Silver | `nyc_silver` |
+| Gold | `nyc_gold` |
+
+These names are the agreed implementation targets for the Bronze, Silver, and Gold layers in this model.
+
+## 3. Layer contracts
 
 ### Bronze
 
@@ -47,11 +59,11 @@ Bronze preserves received values. Cleaning, filtering, and deduplication do not 
 
 The tested taxi composite of VendorID, pickup timestamp, drop-off timestamp, pickup LocationID, and drop-off LocationID is not unique. It cannot be used as the trip primary key without a stable source-record discriminator.
 
-## 3. Approved Gold galaxy schema
+## 4. Approved Gold galaxy schema
 
 The approved model is a **galaxy schema** with two fact tables (`fact_taxi_trip` and `fact_weather_hourly`) sharing conformed date, hour, and zone dimensions where applicable. The schema below matches the team's supplied ERD.
 
-### 3.1 Visual schema
+### 4.1 Visual schema
 
 ```mermaid
 erDiagram
@@ -130,7 +142,7 @@ erDiagram
 
 > **Weather relationship:** `fact_taxi_trip` does not store a direct weather foreign key in the approved schema. Taxi-weather analysis is performed by matching the trip's `pickup_date_key + pickup_hour_key` to `fact_weather_hourly.date_key + hour_key`. This keeps weather as a separate fact while preserving the galaxy design.
 
-### 3.2 Dimensions
+### 4.2 Dimensions
 
 | Table | Grain | Primary key | Main attributes |
 |---|---|---|---|
@@ -138,7 +150,7 @@ erDiagram
 | `dim_hour` | One hour of day | `hour_key` | `hour`, `time_of_day`, `peak_hour_flag` |
 | `dim_zone` | One NYC taxi location | `location_id` | `borough`, `zone`, `service_zone` |
 
-### 3.3 Facts
+### 4.3 Facts
 
 #### `fact_taxi_trip`
 
@@ -188,7 +200,7 @@ erDiagram
 | `source_file` | varchar | No | Lineage | Source file identifier. |
 | `gold_loaded_at` | timestamp | No | Lineage | Gold load timestamp. |
 
-### 3.4 Silver-to-Gold lineage
+### 4.4 Silver-to-Gold lineage
 
 ```text
 BRONZE
@@ -211,7 +223,24 @@ GOLD GALAXY
   └── fact_weather_hourly
 ```
 
-## 4. Required relationships and cardinality
+## 5. Model decisions
+
+| Decision | Agreed rule |
+|---|---|
+| Schema type | Galaxy schema |
+| Taxi fact grain | One retained Green Taxi trip |
+| Weather fact grain | One observation per local hour |
+| Taxi primary key | Deterministic `trip_key` |
+| Weather primary key | Deterministic `weather_hour_key` |
+| Zone key | `location_id` |
+| Taxi-weather relationship | Match pickup `date_key + hour_key` to weather `date_key + hour_key` |
+| Weather storage | Separate fact table |
+| Duplicate handling | Preserve and flag in Silver; do not automatically drop candidate duplicates |
+| Invalid measures | Preserve in Silver; exclude affected records/measures from applicable Gold metrics |
+| Timezone | `America/New_York` |
+| Official namespaces | `nyc_bronze`, `nyc_silver`, `nyc_gold` |
+
+## 6. Required relationships and cardinality
 
 | From | To | Cardinality and rule |
 |---|---|---|
@@ -233,7 +262,7 @@ Before integration:
 4. `fact_weather_hourly.(date_key, hour_key)` must identify at most one weather observation.
 5. Taxi-weather enrichment must never increase the taxi-trip row count.
 
-## 5. Time and units
+## 7. Time and units
 
 - Treat Green Taxi timestamps as NYC local timestamps.
 - Use `America/New_York` for taxi-weather alignment.
@@ -243,7 +272,7 @@ Before integration:
 - Preserve monetary source values; do not silently replace negatives with zero.
 - Weather units are °C, mm, and km/h.
 
-## 6. Quality policy
+## 8. Quality policy
 
 | Condition | Silver treatment | Gold treatment |
 |---|---|---|
@@ -259,7 +288,7 @@ Before integration:
 
 Null is not equivalent to zero or the text `Unknown`.
 
-## 7. Incremental and idempotent processing
+## 9. Incremental and idempotent processing
 
 - Green Taxi is processed by source file and pickup month.
 - Weather is processed by `weather_timestamp` / local weather hour.
@@ -269,7 +298,7 @@ Null is not equivalent to zero or the text `Unknown`.
 - Run March, then add April, then add May without rebuilding accepted prior months.
 - Run the May load twice. Silver and Gold row counts and measure totals must remain unchanged on the second run.
 
-## 8. Business-question coverage
+## 10. Business-question coverage
 
 | Business question | Required tables and grouping |
 |---|---|
@@ -277,7 +306,7 @@ Null is not equivalent to zero or the text `Unknown`.
 | How does weather affect demand and trip behavior? | Match `fact_taxi_trip` pickup date/hour to `fact_weather_hourly` date/hour; compare trip count, duration, distance, fare, and total amount |
 | Which areas show the strongest mobility patterns or opportunities? | `fact_taxi_trip` grouped by pickup/drop-off `dim_zone` and compared across `dim_date`, `dim_hour`, and weather conditions |
 
-## 9. Acceptance evidence
+## 11. Acceptance evidence
 
 The pipeline is accepted only when the following checks return evidence, not only documentation:
 
@@ -295,7 +324,7 @@ The pipeline is accepted only when the following checks return evidence, not onl
 | Idempotency | A repeated May load changes neither accepted row counts nor totals |
 | Analytics | All three required questions have executable SQL and saved result evidence |
 
-## 10. Execution order
+## 12. Execution order
 
 1. Land and verify the three required raw sources.
 2. Run the three Bronze tables and record counts.
@@ -308,9 +337,8 @@ The pipeline is accepted only when the following checks return evidence, not onl
 9. Run incremental and repeated-load tests.
 10. Run the three analytics queries and save concise evidence.
 
-## 11. Current limitations
+## 13. Current limitations
 
 - NYC DOT traffic advisories are optional and excluded from the required model.
 - Silver and Gold implementations must still provide Databricks run evidence before this contract can be marked complete.
 - Exact TLC labels for trip distance and currency must be confirmed from the source documentation before final consumer-facing release.
-- The final schema approval remains a team review item; implementation must not silently diverge from this contract.
