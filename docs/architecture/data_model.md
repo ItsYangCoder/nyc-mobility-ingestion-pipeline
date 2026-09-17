@@ -13,7 +13,7 @@ This document defines the agreed table grains, keys, fields, joins, quality rule
 
 | Source | Verified evidence | Required action |
 |---|---|---|
-| Green Taxi | 133,367 Bronze rows across March-May; 0 exact full-row duplicate groups; 384 candidate duplicate groups; 11 pickups before March 1; 1 negative-duration row; 99 zero-duration rows; 384 negative fare rows; 391 negative total rows | Preserve source rows in Silver, assign a `BIGINT` surrogate `trip_key`, and add quality flags; exclude invalid measures only from affected Gold metrics |
+| Green Taxi | 133,367 Bronze rows across March-May; 0 exact full-row duplicate groups; 384 candidate duplicate groups; 11 pickups before March 1; 1 negative-duration row; 99 zero-duration rows; 384 negative fare rows; 391 negative total rows | Preserve source rows in Silver, derive a deterministic `BIGINT` technical `trip_key`, and add quality flags; exclude invalid measures only from affected Gold metrics |
 | Weather | 3 monthly JSON responses; 744 March hours, 720 April hours, 744 May hours; 2,208 total hourly positions; no array-length mismatch or null hourly elements observed | Explode arrays by matching position and require one unique weather row per local hour |
 | Taxi Zones | 265 rows and 265 distinct LocationID values; no null or duplicate keys; IDs 1-265 are present | Keep LocationID 264 (`Unknown`) and 265 (`Outside of NYC`) as valid dimension members |
 
@@ -53,7 +53,7 @@ Bronze preserves received values. Cleaning, filtering, and deduplication do not 
 
 | Table | Grain and key | Required content |
 |---|---|---|
-| `silver_green_taxi_trips` | One retained source trip; unique `BIGINT` surrogate `trip_key` | Local pickup/drop-off timestamps, pickup/drop-off date and hour, pickup/drop-off LocationID, trip measures, payment fields, source lineage, and quality flags |
+| `silver_green_taxi_trips` | One retained source trip; unique deterministic `BIGINT` technical `trip_key` | Local pickup/drop-off timestamps, pickup/drop-off date and hour, pickup/drop-off LocationID, trip measures, payment fields, source lineage, and quality flags |
 | `silver_weather_hourly` | One weather observation per `America/New_York` hour; unique `weather_hour_local` | Temperature in °C, precipitation in mm, wind speed in km/h, timezone, source lineage |
 | `silver_taxi_zones` | One row per LocationID; unique `location_id` | Borough, zone, service_zone, source lineage |
 
@@ -230,7 +230,8 @@ GOLD GALAXY
 | Schema type | Galaxy schema |
 | Taxi fact grain | One retained Green Taxi trip |
 | Weather fact grain | One observation per local hour |
-| Taxi primary key | `BIGINT` surrogate `trip_key` |
+| Silver taxi key | Deterministic `BIGINT` technical `trip_key` |
+| Gold taxi primary key | `BIGINT` surrogate `trip_key` |
 | Weather primary key | Deterministic `weather_hour_key` |
 | Zone key | `location_id` |
 | Taxi-weather relationship | Match pickup `date_key + hour_key` to weather `date_key + hour_key` |
@@ -242,7 +243,7 @@ GOLD GALAXY
 
 ### Key schema correction
 
-The initial documentation described `trip_key` as a deterministic string/hash-based identifier. After schema review, the team agreed to use `BIGINT` as a surrogate key for `fact_taxi_trip`. This document has been updated to reflect the approved warehouse key design. Source/business trip attributes remain available for reconciliation, deduplication, and business-level trip identification.
+`silver_green_taxi_trips.trip_key` is a deterministic `BIGINT` technical key derived from the retained source record so it remains stable across reruns. `fact_taxi_trip.trip_key` is the Gold warehouse surrogate key. The two layers must not be described as using the same key-generation rule; source/business trip attributes remain available for reconciliation and deduplication.
 
 ## 6. Required relationships and cardinality
 
@@ -297,7 +298,7 @@ Null is not equivalent to zero or the text `Unknown`.
 - Green Taxi is processed by source file and pickup month.
 - Weather is processed by `weather_timestamp` / local weather hour.
 - Taxi Zones is refreshed by deterministic overwrite or upsert on `location_id`.
-- `trip_key` is a `BIGINT` surrogate key assigned to a retained fact row; reruns must match existing source/business identity before assigning a new surrogate key.
+- Silver uses a deterministic `BIGINT` technical `trip_key` for stable reruns. Gold assigns its fact surrogate only after matching the existing Silver/source identity.
 - Reprocessing the same source file or month must not create duplicate taxi fact rows or duplicate surrogate identities.
 - A rerun replaces or upserts only affected business records; it must not blindly append.
 - Run March, then add April, then add May without rebuilding accepted prior months.
@@ -319,7 +320,7 @@ The pipeline is accepted only when the following checks return evidence, not onl
 |---|---|
 | Bronze counts | Green Taxi = 133,367; Weather raw responses = 3; Taxi Zones = 265 |
 | Weather explosion | 2,208 hourly positions before any documented DST-specific adjustment |
-| Silver trip key | `trip_key` is non-null, `BIGINT`, unique, and assigned as a surrogate warehouse key |
+| Silver trip key | `trip_key` is non-null, deterministic, `BIGINT`, and unique |
 | Silver weather key | `weather_hour_local` is non-null and unique |
 | Zone key | `location_id` is non-null and unique |
 | Foreign keys | Pickup and drop-off zone keys resolve, including valid members 264 and 265 |
