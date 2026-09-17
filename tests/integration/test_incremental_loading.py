@@ -130,7 +130,7 @@ def get_incremental_test_plan() -> Dict[str, Any]:
         "validation_points": {
             "row_counts": "Each month's row count must remain stable after subsequent loads",
             "measure_totals": "Sum of fare, total_amount, trip_distance must remain stable per month",
-            "key_uniqueness": "Surrogate keys must not be regenerated on reprocessing",
+            "key_uniqueness": "Silver technical keys and Gold surrogate keys must remain stable on reprocessing",
             "dimension_stability": "Dimension tables must not change on incremental fact loads"
         },
         "expected_bronze_counts": {
