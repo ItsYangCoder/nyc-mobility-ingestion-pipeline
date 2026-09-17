@@ -44,7 +44,7 @@ class TestIdempotency:
     
     def test_may_rerun_silver_key_stability(self):
         """
-        PENDING: Test that May rerun does not regenerate Silver surrogate keys
+        PENDING: Test that May rerun does not regenerate Silver deterministic technical keys
         Expected: trip_key and weather_hour_local values remain identical
         """
         # TODO: Implement after Silver tables exist
@@ -131,7 +131,7 @@ def get_idempotency_test_plan() -> Dict[str, Any]:
         "test_scenario": "Rerun May load with identical input data",
         "validation_points": {
             "row_counts": "Total and per-month row counts must be identical before and after rerun",
-            "key_stability": "Surrogate keys must not be regenerated or modified on rerun",
+            "key_stability": "Silver technical keys and Gold surrogate keys must remain stable on rerun",
             "measure_totals": "Sum of all measures must be identical before and after rerun",
             "no_duplicates": "No duplicate grain records should be created by rerun"
         },
