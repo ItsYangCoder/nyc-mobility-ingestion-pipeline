@@ -1,9 +1,4 @@
 # Databricks Unity Catalog contract
-#
-# This file is the single naming reference for the NYC Mobility pipeline.
-# Table schemas are separated by medallion layer. The landing schema only
-# owns the external Volume and is not a Bronze table schema.
-
 catalog: nyc_mobility
 
 landing:
@@ -20,7 +15,7 @@ schemas:
 pipeline:
   name: nyc_group_c_mobility_pipeline
   mode: triggered
-  source_root: transformations
+  source_root: src/nyc_mobility/transformations
   default_schema: nyc_bronze
 
 tables:
@@ -28,10 +23,20 @@ tables:
     green_taxi: nyc_mobility.nyc_bronze.bronze_green_taxi_raw
     weather: nyc_mobility.nyc_bronze.bronze_weather_raw
     taxi_zones: nyc_mobility.nyc_bronze.bronze_taxi_zones_raw
+  silver:
+    green_taxi: nyc_mobility.nyc_silver.silver_green_taxi_trips
+    weather: nyc_mobility.nyc_silver.silver_weather_hourly
+    taxi_zones: nyc_mobility.nyc_silver.silver_taxi_zones
+  gold:
+    dim_date: nyc_mobility.nyc_gold.dim_date
+    dim_hour: nyc_mobility.nyc_gold.dim_hour
+    dim_zone: nyc_mobility.nyc_gold.dim_zone
+    fact_taxi_trip: nyc_mobility.nyc_gold.fact_taxi_trip
+    fact_weather_hourly: nyc_mobility.nyc_gold.fact_weather_hourly
 
 rules:
-  - Use the development branch for active pipeline work.
-  - Promote to main only through a reviewed pull request with green CI.
+  - Use development for active integration work.
+  - Promote development to testing and testing to main through reviewed PRs.
   - Do not write pipeline tables to the landing schema.
-  - Silver and Gold table definitions must use their fully qualified schema names.
-  - Use nyc_quality only for quarantine, reconciliation, and validation outputs.
+  - Use fully qualified names for Silver and Gold tables.
+  - Use nyc_quality only for quarantine and validation outputs.

@@ -1,0 +1,1 @@
+"""Conformed Gold dimensions."""

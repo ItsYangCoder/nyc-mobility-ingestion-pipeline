@@ -1,1 +1,1 @@
-"""Lakeflow table definitions grouped by medallion layer."""
+"""Gold fact constellation table definitions."""
