@@ -43,8 +43,11 @@ silver AS (
         COUNT_IF(has_conflicting_values) AS conflicting_location_ids,
         COUNT_IF(has_duplicate_key) AS documented_duplicate_keys,
         COUNT_IF(had_control_char) AS control_char_review_rows,
-        COUNT_IF(_source_file IS NULL OR _ingested_at IS NULL)
-            AS missing_lineage_rows,
+        COUNT_IF(
+            _source_file IS NULL
+            OR _source_file_modified_at IS NULL
+            OR _ingested_at IS NULL
+        ) AS missing_lineage_rows,
         COUNT_IF(
             location_id IN (c.unknown_zone_id, c.outside_zone_id)
         ) AS special_members_present
