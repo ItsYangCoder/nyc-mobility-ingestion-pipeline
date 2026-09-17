@@ -1,16 +1,37 @@
--- Bronze lineage checks. Each result should be zero.
+-- Purpose: verify required Bronze lineage fields.
+-- Pass condition: both missing counts equal zero for every source.
 
-SELECT 'green_taxi' AS source,
-       SUM(CASE WHEN _source_file IS NULL THEN 1 ELSE 0 END) AS missing_source_file,
-       SUM(CASE WHEN _ingested_at IS NULL THEN 1 ELSE 0 END) AS missing_ingested_at
-FROM nyc_mobility.nyc_bronze.bronze_green_taxi_raw
-UNION ALL
-SELECT 'weather',
-       SUM(CASE WHEN _source_file IS NULL THEN 1 ELSE 0 END),
-       SUM(CASE WHEN _ingested_at IS NULL THEN 1 ELSE 0 END)
-FROM nyc_mobility.nyc_bronze.bronze_weather_raw
-UNION ALL
-SELECT 'taxi_zones',
-       SUM(CASE WHEN _source_file IS NULL THEN 1 ELSE 0 END),
-       SUM(CASE WHEN _ingested_at IS NULL THEN 1 ELSE 0 END)
-FROM nyc_mobility.nyc_bronze.bronze_taxi_zones_raw;
+WITH lineage AS (
+    SELECT
+        'green_taxi' AS source,
+        COUNT_IF(_source_file IS NULL) AS missing_source_file,
+        COUNT_IF(_ingested_at IS NULL) AS missing_ingested_at
+    FROM nyc_mobility.nyc_bronze.bronze_green_taxi_raw
+
+    UNION ALL
+
+    SELECT
+        'weather' AS source,
+        COUNT_IF(_source_file IS NULL) AS missing_source_file,
+        COUNT_IF(_ingested_at IS NULL) AS missing_ingested_at
+    FROM nyc_mobility.nyc_bronze.bronze_weather_raw
+
+    UNION ALL
+
+    SELECT
+        'taxi_zones' AS source,
+        COUNT_IF(_source_file IS NULL) AS missing_source_file,
+        COUNT_IF(_ingested_at IS NULL) AS missing_ingested_at
+    FROM nyc_mobility.nyc_bronze.bronze_taxi_zones_raw
+)
+SELECT
+    source,
+    missing_source_file,
+    missing_ingested_at,
+    CASE
+        WHEN missing_source_file = 0 AND missing_ingested_at = 0
+        THEN 'PASS'
+        ELSE 'FAIL'
+    END AS status
+FROM lineage
+ORDER BY source;
