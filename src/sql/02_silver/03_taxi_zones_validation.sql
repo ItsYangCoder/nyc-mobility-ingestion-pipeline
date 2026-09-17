@@ -1,177 +1,115 @@
 -- Taxi Zones Silver validation
--- Run only AFTER the ETL Pipeline Job creates/updates silver_taxi_zones.
+-- Pipeline-managed validation summary.
 
+CREATE OR REFRESH MATERIALIZED VIEW
+nyc_mobility.nyc_quality.taxi_zones_silver_validation
+COMMENT 'Validation summary for the Silver Taxi Zones table.'
+AS
 
--- Latest Taxi Zones ingestion snapshot only.
-WITH latest_bronze AS (
-    SELECT *
+WITH config AS (
+    SELECT
+        265 AS expected_zone_count,
+        264 AS unknown_zone_id,
+        265 AS outside_zone_id
+),
+
+-- Validate only the latest Bronze Taxi Zones snapshot.
+bronze AS (
+    SELECT
+        COUNT(*) AS bronze_rows,
+        COUNT(DISTINCT LocationID) AS bronze_distinct_location_ids,
+        COUNT_IF(LocationID IS NULL) AS bronze_null_location_ids,
+        COUNT_IF(LocationID <= 0) AS bronze_invalid_location_ids
+
     FROM nyc_mobility.nyc_bronze.bronze_taxi_zones_raw
+
     WHERE _ingested_at = (
         SELECT MAX(_ingested_at)
         FROM nyc_mobility.nyc_bronze.bronze_taxi_zones_raw
     )
 ),
 
-bronze AS (
-    SELECT
-        COUNT(*) AS bronze_rows,
-        COUNT(DISTINCT LocationID) AS bronze_distinct_location_ids,
-
-        SUM(
-            CASE
-                WHEN LocationID IS NULL
-                THEN 1 ELSE 0
-            END
-        ) AS bronze_null_location_ids,
-
-        SUM(
-            CASE
-                WHEN LocationID <= 0
-                THEN 1 ELSE 0
-            END
-        ) AS bronze_invalid_location_ids
-
-    FROM latest_bronze
-),
-
+-- Validate the generated Silver Taxi Zones table.
 silver AS (
     SELECT
         COUNT(*) AS silver_rows,
         COUNT(DISTINCT location_id) AS silver_distinct_location_ids,
 
-        SUM(
-            CASE
-                WHEN location_id IS NULL
-                THEN 1 ELSE 0
-            END
-        ) AS null_location_ids,
+        COUNT_IF(location_id IS NULL) AS null_location_ids,
+        COUNT_IF(location_id <= 0) AS invalid_location_ids,
 
-        SUM(
-            CASE
-                WHEN location_id <= 0
-                THEN 1 ELSE 0
-            END
-        ) AS invalid_location_ids,
-
-        SUM(
-            CASE
-                WHEN borough IS NULL
-                  OR TRIM(borough) = ''
-                THEN 1 ELSE 0
-            END
+        COUNT_IF(
+            borough IS NULL OR TRIM(borough) = ''
         ) AS missing_borough,
 
-        SUM(
-            CASE
-                WHEN zone IS NULL
-                  OR TRIM(zone) = ''
-                THEN 1 ELSE 0
-            END
+        COUNT_IF(
+            zone IS NULL OR TRIM(zone) = ''
         ) AS missing_zone,
 
-        SUM(
-            CASE
-                WHEN service_zone IS NULL
-                  OR TRIM(service_zone) = ''
-                THEN 1 ELSE 0
-            END
+        COUNT_IF(
+            service_zone IS NULL OR TRIM(service_zone) = ''
         ) AS missing_service_zone,
 
-        SUM(
-            CASE
-                WHEN borough != TRIM(
-                    REGEXP_REPLACE(
-                        borough,
-                        r'\s+',
-                        ' '
-                    )
-                )
-                THEN 1 ELSE 0
-            END
+        COUNT_IF(
+            borough != TRIM(
+                REGEXP_REPLACE(borough, r'\s+', ' ')
+            )
         ) AS unstandardized_borough,
 
-        SUM(
-            CASE
-                WHEN zone != TRIM(
-                    REGEXP_REPLACE(
-                        zone,
-                        r'\s+',
-                        ' '
-                    )
-                )
-                THEN 1 ELSE 0
-            END
+        COUNT_IF(
+            zone != TRIM(
+                REGEXP_REPLACE(zone, r'\s+', ' ')
+            )
         ) AS unstandardized_zone,
 
-        SUM(
-            CASE
-                WHEN service_zone != TRIM(
-                    REGEXP_REPLACE(
-                        service_zone,
-                        r'\s+',
-                        ' '
-                    )
-                )
-                THEN 1 ELSE 0
-            END
+        COUNT_IF(
+            service_zone != TRIM(
+                REGEXP_REPLACE(service_zone, r'\s+', ' ')
+            )
         ) AS unstandardized_service_zone,
 
-        SUM(
-            CASE
-                WHEN has_conflicting_values
-                THEN 1 ELSE 0
-            END
-        ) AS conflicting_location_ids,
+        COUNT_IF(has_conflicting_values)
+            AS conflicting_location_ids,
 
-        SUM(
-            CASE
-                WHEN has_duplicate_key
-                THEN 1 ELSE 0
-            END
-        ) AS documented_duplicate_keys,
+        COUNT_IF(has_duplicate_key)
+            AS documented_duplicate_keys,
 
-        SUM(
-            CASE
-                WHEN had_control_char
-                THEN 1 ELSE 0
-            END
-        ) AS control_char_review_rows,
+        COUNT_IF(had_control_char)
+            AS control_char_review_rows,
 
-        SUM(
-            CASE
-                WHEN _source_file IS NULL
-                  OR _ingested_at IS NULL
-                THEN 1 ELSE 0
-            END
+        COUNT_IF(
+            _source_file IS NULL
+            OR _ingested_at IS NULL
         ) AS missing_lineage_rows,
 
-        SUM(
-            CASE
-                WHEN location_id IN (264, 265)
-                THEN 1 ELSE 0
-            END
+        COUNT_IF(
+            location_id IN (
+                c.unknown_zone_id,
+                c.outside_zone_id
+            )
         ) AS special_members_present
 
     FROM nyc_mobility.nyc_silver.silver_taxi_zones
+    CROSS JOIN config c
 ),
 
--- Distinct pickup/dropoff LocationIDs actually used by Green Taxi.
-taxi_location_ids AS (
-    SELECT DISTINCT
-        PULocationID AS location_id
+-- LocationIDs actually referenced by Green Taxi trips.
+used_zone_ids AS (
+    SELECT PULocationID AS location_id
     FROM nyc_mobility.nyc_bronze.bronze_green_taxi_raw
 
     UNION
 
-    SELECT DISTINCT
-        DOLocationID AS location_id
+    SELECT DOLocationID AS location_id
     FROM nyc_mobility.nyc_bronze.bronze_green_taxi_raw
 ),
 
+-- Check whether every used Taxi LocationID exists in Silver.
 referential_integrity AS (
     SELECT
         COUNT(*) AS unmatched_taxi_location_ids
-    FROM taxi_location_ids t
+
+    FROM used_zone_ids t
 
     LEFT ANTI JOIN
         nyc_mobility.nyc_silver.silver_taxi_zones z
@@ -179,93 +117,101 @@ referential_integrity AS (
 )
 
 SELECT
-    bronze.*,
-    silver.*,
-    referential_integrity.*,
+    b.*,
+    s.*,
+    r.*,
 
-    CASE
-        WHEN bronze_rows = 265
-         AND silver_rows = 265
-        THEN 'PASS'
-        ELSE 'FAIL'
-    END AS current_265_row_baseline_check,
+    IF(
+        b.bronze_rows = c.expected_zone_count
+        AND s.silver_rows = c.expected_zone_count,
+        'PASS',
+        'FAIL'
+    ) AS row_baseline_check,
 
-    CASE
-        WHEN silver_rows = silver_distinct_location_ids
-        THEN 'PASS'
-        ELSE 'FAIL'
-    END AS unique_location_id_check,
+    IF(
+        b.bronze_null_location_ids = 0
+        AND b.bronze_invalid_location_ids = 0,
+        'PASS',
+        'FAIL'
+    ) AS bronze_location_id_check,
 
-    CASE
-        WHEN null_location_ids = 0
-        THEN 'PASS'
-        ELSE 'FAIL'
-    END AS non_null_location_id_check,
+    IF(
+        s.silver_rows = s.silver_distinct_location_ids,
+        'PASS',
+        'FAIL'
+    ) AS unique_location_id_check,
 
-    CASE
-        WHEN invalid_location_ids = 0
-        THEN 'PASS'
-        ELSE 'FAIL'
-    END AS location_id_range_check,
+    IF(
+        s.null_location_ids = 0,
+        'PASS',
+        'FAIL'
+    ) AS non_null_location_id_check,
 
-    CASE
-        WHEN missing_borough = 0
-         AND missing_zone = 0
-         AND missing_service_zone = 0
-        THEN 'PASS'
-        ELSE 'FAIL'
-    END AS required_text_check,
+    IF(
+        s.invalid_location_ids = 0,
+        'PASS',
+        'FAIL'
+    ) AS location_id_range_check,
 
-    CASE
-        WHEN unstandardized_borough = 0
-         AND unstandardized_zone = 0
-         AND unstandardized_service_zone = 0
-        THEN 'PASS'
-        ELSE 'FAIL'
-    END AS text_standardization_check,
+    IF(
+        s.missing_borough
+        + s.missing_zone
+        + s.missing_service_zone = 0,
+        'PASS',
+        'FAIL'
+    ) AS required_text_check,
 
-    CASE
-        WHEN conflicting_location_ids = 0
-        THEN 'PASS'
-        ELSE 'FAIL'
-    END AS conflicting_values_check,
+    IF(
+        s.unstandardized_borough
+        + s.unstandardized_zone
+        + s.unstandardized_service_zone = 0,
+        'PASS',
+        'FAIL'
+    ) AS text_standardization_check,
 
-    CASE
-        WHEN documented_duplicate_keys = 0
-        THEN 'PASS'
-        ELSE 'REVIEW'
-    END AS duplicate_key_check,
+    IF(
+        s.conflicting_location_ids = 0,
+        'PASS',
+        'FAIL'
+    ) AS conflicting_values_check,
 
-    CASE
-        WHEN control_char_review_rows = 0
-        THEN 'PASS'
-        ELSE 'REVIEW'
-    END AS control_character_check,
+    IF(
+        s.documented_duplicate_keys = 0,
+        'PASS',
+        'REVIEW'
+    ) AS duplicate_key_check,
 
-    CASE
-        WHEN missing_lineage_rows = 0
-        THEN 'PASS'
-        ELSE 'FAIL'
-    END AS lineage_check,
+    IF(
+        s.control_char_review_rows = 0,
+        'PASS',
+        'REVIEW'
+    ) AS control_character_check,
 
-    CASE
-        WHEN special_members_present = 2
-        THEN 'PASS'
-        ELSE 'FAIL'
-    END AS special_members_264_265_check,
+    IF(
+        s.missing_lineage_rows = 0,
+        'PASS',
+        'FAIL'
+    ) AS lineage_check,
 
-    CASE
-        WHEN silver_rows = bronze_distinct_location_ids
-        THEN 'PASS'
-        ELSE 'FAIL'
-    END AS bronze_silver_reconciliation,
+    IF(
+        s.special_members_present = 2,
+        'PASS',
+        'FAIL'
+    ) AS special_members_check,
 
-    CASE
-        WHEN unmatched_taxi_location_ids = 0
-        THEN 'PASS'
-        ELSE 'FAIL'
-    END AS pickup_dropoff_zone_compatibility_check
+    IF(
+        s.silver_rows = b.bronze_distinct_location_ids,
+        'PASS',
+        'FAIL'
+    ) AS bronze_silver_reconciliation,
 
-FROM bronze
-CROSS JOIN silver
-CROSS JOIN referential_integrity;
+    IF(
+        r.unmatched_taxi_location_ids = 0,
+        'PASS',
+        'FAIL'
+    ) AS pickup_dropoff_zone_compatibility_check
+
+FROM bronze b
+CROSS JOIN silver s
+CROSS JOIN referential_integrity r
+CROSS JOIN config c;
