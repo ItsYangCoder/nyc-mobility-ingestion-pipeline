@@ -39,7 +39,10 @@ SELECT
     SUM(
         CASE WHEN source_file_modified_at IS NULL THEN 1 ELSE 0 END
     ) AS null_source_file_modified_at,
-    SUM(CASE WHEN ingested_at IS NULL THEN 1 ELSE 0 END) AS null_ingested_at
+    SUM(CASE WHEN ingested_at IS NULL THEN 1 ELSE 0 END) AS null_ingested_at,
+    SUM(
+        CASE WHEN silver_processed_at IS NULL THEN 1 ELSE 0 END
+    ) AS null_silver_processed_at
 FROM nyc_mobility.nyc_silver.silver_green_taxi_trips;
 
 
@@ -110,6 +113,7 @@ WITH metrics AS (
             OR source_file IS NULL
             OR source_file_modified_at IS NULL
             OR ingested_at IS NULL
+            OR silver_processed_at IS NULL
         ) AS missing_required_rows,
         COUNT(DISTINCT CASE
             WHEN pickup_date_local BETWEEN DATE '2026-03-01'
