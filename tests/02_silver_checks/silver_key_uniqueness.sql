@@ -1,6 +1,6 @@
 -- PENDING: Enable after Silver tables are implemented
 -- Silver key uniqueness checks
--- Validates that Silver surrogate keys are non-null and unique
+-- Validates that Silver deterministic technical keys are non-null and unique
 
 -- Check 1: silver_green_taxi_trips.trip_key uniqueness
 SELECT 'silver_green_taxi_trips' AS table_name,
