@@ -1,7 +1,6 @@
-requests
-beautifulsoup4
-duckdb
-pyarrow
-boto3
-python-dotenv
-pytest
+requests==2.34.2
+beautifulsoup4==4.15.0
+duckdb==1.5.5
+pyarrow==25.0.1
+boto3==1.43.97
+python-dotenv==1.2.3

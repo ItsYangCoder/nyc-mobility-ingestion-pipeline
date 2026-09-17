@@ -1,37 +1,36 @@
--- PENDING: Enable after silver_green_taxi_trips is implemented
--- Bronze → Silver row-count reconciliation
--- Expected: Silver should retain all Bronze rows (133,367) unless explicitly excluded
--- This check identifies any unexpected row count differences
+-- Bronze-to-Silver reconciliation. Every row must return PASS.
+-- Weather reconciles source array positions, not one Bronze API response row.
 
-WITH bronze_counts AS (
-  SELECT 'green_taxi' AS source, COUNT(*) AS bronze_count
-  FROM nyc_mobility.nyc_bronze.bronze_green_taxi_raw
-  UNION ALL
-  SELECT 'weather', COUNT(*)
-  FROM nyc_mobility.nyc_bronze.bronze_weather_raw
-  UNION ALL
-  SELECT 'taxi_zones', COUNT(*)
-  FROM nyc_mobility.nyc_bronze.bronze_taxi_zones_raw
+WITH expected AS (
+    SELECT 'green_taxi' AS source, COUNT(*) AS expected_rows
+    FROM nyc_mobility.nyc_bronze.bronze_green_taxi_raw
+    UNION ALL
+    SELECT 'weather', SUM(SIZE(hourly.time))
+    FROM nyc_mobility.nyc_bronze.bronze_weather_raw
+    UNION ALL
+    SELECT 'taxi_zones', COUNT(DISTINCT LocationID)
+    FROM nyc_mobility.nyc_bronze.bronze_taxi_zones_raw
+    WHERE _ingested_at = (
+        SELECT MAX(_ingested_at)
+        FROM nyc_mobility.nyc_bronze.bronze_taxi_zones_raw
+    )
 ),
-silver_counts AS (
-  SELECT 'green_taxi' AS source, COUNT(*) AS silver_count
-  FROM nyc_mobility.nyc_silver.silver_green_taxi_trips
-  UNION ALL
-  SELECT 'weather', COUNT(*)
-  FROM nyc_mobility.nyc_silver.silver_weather_hourly
-  UNION ALL
-  SELECT 'taxi_zones', COUNT(*)
-  FROM nyc_mobility.nyc_silver.silver_taxi_zones
+actual AS (
+    SELECT 'green_taxi' AS source, COUNT(*) AS actual_rows
+    FROM nyc_mobility.nyc_silver.silver_green_taxi_trips
+    UNION ALL
+    SELECT 'weather', COUNT(*)
+    FROM nyc_mobility.nyc_silver.silver_weather_hourly
+    UNION ALL
+    SELECT 'taxi_zones', COUNT(*)
+    FROM nyc_mobility.nyc_silver.silver_taxi_zones
 )
-SELECT 
-  b.source,
-  b.bronze_count,
-  s.silver_count,
-  b.bronze_count - s.silver_count AS difference,
-  CASE 
-    WHEN b.bronze_count = s.silver_count THEN 'MATCH'
-    ELSE 'REVIEW'
-  END AS status
-FROM bronze_counts b
-LEFT JOIN silver_counts s ON b.source = s.source
-WHERE b.bronze_count <> s.silver_count;
+SELECT
+    e.source,
+    e.expected_rows,
+    a.actual_rows,
+    a.actual_rows - e.expected_rows AS row_difference,
+    CASE WHEN a.actual_rows = e.expected_rows THEN 'PASS' ELSE 'FAIL' END AS status
+FROM expected e
+JOIN actual a USING (source)
+ORDER BY e.source;

@@ -5,7 +5,8 @@ external Volume. Auto Loader tracks files already processed, so rerunning the
 pipeline does not duplicate previously ingested files.
 
 The authoritative catalog and schema contract is
-[`config/catalog_and_schemas.yml`](../config/catalog_and_schemas.yml).
+[`src/nyc_mobility/config.py`](../../src/nyc_mobility/config.py) and the
+environment contract in [`.env.example`](../../.env.example).
 
 ## Pipeline source
 

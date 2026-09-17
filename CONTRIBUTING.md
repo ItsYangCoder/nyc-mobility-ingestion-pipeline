@@ -36,6 +36,6 @@ Never commit credentials, raw datasets, external-volume contents, generated chec
 
 ## Validation
 
-Run `pytest -q` locally. Databricks changes must also include pipeline-run evidence and relevant Bronze/Silver/Gold quality counts.
+Install `requirements-dev.txt` and run `python -m pytest -q` locally. Databricks changes must also include pipeline-run evidence and relevant Bronze/Silver/Gold quality counts.
 
 Before promoting `development` to `testing`, confirm the complete test suite passes. Before promoting `testing` to `main`, record release validation and obtain approval.

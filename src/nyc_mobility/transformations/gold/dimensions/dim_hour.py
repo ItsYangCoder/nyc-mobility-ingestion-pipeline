@@ -3,8 +3,10 @@
 from pyspark import pipelines as dp
 from pyspark.sql import functions as F
 
+from nyc_mobility.config import load_config
 
-GOLD_TABLE = "nyc_mobility.nyc_gold.dim_hour"
+CONFIG = load_config(spark)
+GOLD_TABLE = CONFIG.table("gold", "dim_hour")
 
 
 @dp.materialized_view(
@@ -17,8 +19,7 @@ def dim_hour():
     hours = spark.range(24).select(F.col("id").cast("int").alias("hour_key"))
 
     return (
-        hours
-        .withColumn("hour", F.col("hour_key"))
+        hours.withColumn("hour", F.col("hour_key"))
         .withColumn(
             "time_of_day",
             F.when(F.col("hour") < 6, F.lit("overnight"))

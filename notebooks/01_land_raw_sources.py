@@ -6,8 +6,9 @@
 
 # COMMAND ----------
 
-from pathlib import Path
+import logging
 import sys
+from pathlib import Path
 
 repo_root = next(
     (
@@ -18,40 +19,34 @@ repo_root = next(
     None,
 )
 if repo_root is None:
-    raise RuntimeError(
-        "Open this notebook from the repository's notebooks folder."
-    )
+    raise RuntimeError("Open this notebook from the repository's notebooks folder.")
 
 sys.path.insert(0, str(repo_root / "src"))
 
+from nyc_mobility.config import load_config
 from nyc_mobility.ingestion.download_taxi_zones import download_or_reuse
 from nyc_mobility.ingestion.green_taxi import ingest_green_taxi
 from nyc_mobility.ingestion.weather import download_weather
+from nyc_mobility.logging import configure_logging, get_logger, log_event
 
-LANDING = Path(
-    "/Volumes/nyc_mobility/nyc_group_c/nyc_source_files/landing"
-)
+configure_logging()
+LOGGER = get_logger("notebooks.land_raw_sources")
+CONFIG = load_config(spark)
+LANDING = Path(CONFIG.landing_path)
 
 # COMMAND ----------
 
 green_status = ingest_green_taxi(
     "all",
     output_dir=LANDING / "green_taxi",
-    inventory_path=LANDING
-    / "green_taxi"
-    / "_metadata"
-    / "green_taxi_inventory.csv",
+    inventory_path=LANDING / "green_taxi" / "_metadata" / "green_taxi_inventory.csv",
 )
 if green_status:
     raise RuntimeError("One or more Green Taxi downloads failed.")
 
 # COMMAND ----------
 
-for start_date, end_date in (
-    ("2026-03-01", "2026-03-31"),
-    ("2026-04-01", "2026-04-30"),
-    ("2026-05-01", "2026-05-31"),
-):
+for start_date, end_date in CONFIG.monthly_date_ranges():
     download_weather(
         start_date,
         end_date,
@@ -70,17 +65,26 @@ expected = {
     "taxi_zones": 2,
 }
 for folder, minimum_count in expected.items():
-    files = sorted(
-        path
-        for path in (LANDING / folder).rglob("*")
-        if path.is_file()
+    files = sorted(path for path in (LANDING / folder).rglob("*") if path.is_file())
+    log_event(
+        LOGGER,
+        logging.INFO,
+        "landing.inventory_checked",
+        "Landing folder inventory checked",
+        source=folder,
+        file_count=len(files),
+        minimum_file_count=minimum_count,
+        files=[
+            {"name": path.name, "size_bytes": path.stat().st_size} for path in files
+        ],
     )
-    print(f"\n{folder}: {len(files)} file(s)")
-    for path in files:
-        print(f"  {path.name} ({path.stat().st_size:,} bytes)")
     if len(files) < minimum_count:
-        raise RuntimeError(
-            f"{folder} has fewer than {minimum_count} expected files."
-        )
+        raise RuntimeError(f"{folder} has fewer than {minimum_count} expected files.")
 
-print("\nPASS: all three required sources landed in the R2-backed volume.")
+log_event(
+    LOGGER,
+    logging.INFO,
+    "landing.completed",
+    "All required sources landed in the configured volume",
+    landing_path=LANDING,
+)

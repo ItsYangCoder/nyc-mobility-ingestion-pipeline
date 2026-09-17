@@ -1,21 +1,25 @@
 import argparse
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 
 import requests
 
+from nyc_mobility.config import CONFIG
+from nyc_mobility.logging import configure_logging, get_logger, log_event
 
 LATITUDE = 40.7128
 LONGITUDE = -74.0060
-TIMEZONE = "America/New_York"
+TIMEZONE = CONFIG.timezone
 HOURLY_VARIABLES = [
     "temperature_2m",
     "precipitation",
     "wind_speed_10m",
 ]
-URL = "https://archive-api.open-meteo.com/v1/archive"
+URL = CONFIG.weather_source_url
 DEFAULT_OUTPUT_DIR = Path("data/raw/weather")
+LOGGER = get_logger(__name__)
 
 
 def valid_date(value: str) -> str:
@@ -43,10 +47,13 @@ def validate_weather(data: object) -> dict:
         raise ValueError("Hourly timestamps are missing or empty.")
 
     try:
-        parsed = [datetime.fromisoformat(value.replace("Z", "+00:00"))
-                  for value in timestamps]
+        parsed = [
+            datetime.fromisoformat(value.replace("Z", "+00:00")) for value in timestamps
+        ]
     except (AttributeError, TypeError, ValueError) as error:
-        raise ValueError("Hourly timestamps must be valid ISO datetime strings.") from error
+        raise ValueError(
+            "Hourly timestamps must be valid ISO datetime strings."
+        ) from error
     if len(set(parsed)) != len(parsed):
         raise ValueError("Duplicate hourly timestamps are not allowed.")
 
@@ -55,17 +62,15 @@ def validate_weather(data: object) -> dict:
         if not isinstance(values, list):
             raise ValueError(f"Hourly field is missing or invalid: {variable}")
         if len(values) != len(timestamps):
-            raise ValueError(
-                f"{variable} length does not match timestamp length."
-            )
+            raise ValueError(f"{variable} length does not match timestamp length.")
 
     return hourly
+
+
 def load_existing_weather(filename: Path) -> dict | None:
     """Reuse an existing raw file only after it passes validation."""
     if not filename.exists():
         return None
-
-    print(f"Existing file found: {filename}")
 
     try:
         with filename.open("r", encoding="utf-8") as file:
@@ -78,7 +83,14 @@ def load_existing_weather(filename: Path) -> dict | None:
             f"Reason: {error}"
         ) from error
 
-    print("Existing file is valid. Download skipped.")
+    log_event(
+        LOGGER,
+        logging.INFO,
+        "weather.reused",
+        "Existing weather file is valid; download skipped",
+        filename=filename,
+        file_size_bytes=filename.stat().st_size,
+    )
     return data
 
 
@@ -94,9 +106,7 @@ def download_weather(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     filename = output_dir / f"weather_{start_date}_{end_date}.json"
-    metadata_filename = (
-        output_dir / f"weather_{start_date}_{end_date}_metadata.json"
-    )
+    metadata_filename = output_dir / f"weather_{start_date}_{end_date}_metadata.json"
 
     existing_data = load_existing_weather(filename)
     if existing_data is not None:
@@ -111,17 +121,53 @@ def download_weather(
         "timezone": TIMEZONE,
     }
 
-    print("Requesting weather data...")
-    print(params)
+    log_event(
+        LOGGER,
+        logging.INFO,
+        "weather.download_started",
+        "Requesting weather data",
+        source_url=URL,
+        output_file=filename,
+        request_parameters=params,
+    )
 
     try:
         response = requests.get(URL, params=params, timeout=30)
-        print("HTTP status:", response.status_code)
+        log_event(
+            LOGGER,
+            logging.INFO,
+            "weather.http_response",
+            "Weather API response received",
+            status_code=response.status_code,
+            start_date=start_date,
+            end_date=end_date,
+        )
         response.raise_for_status()
         data = response.json()
     except requests.RequestException as error:
+        log_event(
+            LOGGER,
+            logging.ERROR,
+            "weather.request_failed",
+            "Weather API request failed",
+            source_url=URL,
+            start_date=start_date,
+            end_date=end_date,
+            error=str(error),
+            exc_info=True,
+        )
         raise RuntimeError(f"Failed to retrieve weather data: {error}") from error
     except ValueError as error:
+        log_event(
+            LOGGER,
+            logging.ERROR,
+            "weather.invalid_json",
+            "Weather API returned invalid JSON",
+            start_date=start_date,
+            end_date=end_date,
+            error=str(error),
+            exc_info=True,
+        )
         raise ValueError("API response is not valid JSON.") from error
 
     hourly = validate_weather(data)
@@ -155,16 +201,22 @@ def download_weather(
     timestamps = hourly["time"]
     file_size_bytes = filename.stat().st_size
 
-    print(f"Saved: {filename}")
-    print(f"Saved metadata: {metadata_filename}")
-    print(f"File size: {file_size_bytes:,} bytes")
-    print("First timestamp:", timestamps[0])
-    print("Last timestamp:", timestamps[-1])
-    print("Number of hourly timestamps:", len(timestamps))
-    print("Coverage and array length checks passed.")
+    log_event(
+        LOGGER,
+        logging.INFO,
+        "weather.download_completed",
+        "Weather data downloaded and validated",
+        output_file=filename,
+        metadata_file=metadata_filename,
+        file_size_bytes=file_size_bytes,
+        first_timestamp=timestamps[0],
+        last_timestamp=timestamps[-1],
+        hourly_timestamp_count=len(timestamps),
+    )
 
 
 def main() -> None:
+    configure_logging()
     parser = argparse.ArgumentParser(
         description="Download historical weather data from Open-Meteo."
     )

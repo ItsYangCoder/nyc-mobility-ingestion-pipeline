@@ -36,9 +36,9 @@ Use Python 3.12.
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
 python -m pip install --editable .
-pytest -q
+python -m pytest -q
 ```
 
 On Windows PowerShell:
@@ -46,19 +46,26 @@ On Windows PowerShell:
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
 python -m pip install --editable .
-pytest -q
+python -m pytest -q
 ```
 
 ## Databricks execution
 
-1. Pull the latest `development` branch.
-2. Run `src/sql/00_setup/00_setup.sql` once per environment.
-3. Run `notebooks/01_land_raw_sources.py`.
-4. Configure the Lakeflow pipeline source root as
-   `src/nyc_mobility/transformations/`.
-5. Run the applicable checks under `tests/sql/` before promotion.
+The repository is deployed through the root `databricks.yml` bundle.
+
+```bash
+export DATABRICKS_HOST="https://<workspace-host>"
+databricks bundle validate -t development
+databricks bundle deploy -t development
+databricks bundle run -t development mobility_workflow
+```
+
+Production additionally requires `BUNDLE_VAR_service_principal_name`. The
+production schedule is intentionally deployed in `PAUSED` state and must be
+enabled only after a reviewed smoke run. See
+[`docs/runbooks/bundle_deployment.md`](docs/runbooks/bundle_deployment.md).
 
 ## Branch workflow
 

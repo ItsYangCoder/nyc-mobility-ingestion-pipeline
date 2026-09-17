@@ -1,4 +1,5 @@
 """Offline ingestion regressions; no downloaded datasets or credentials needed."""
+
 import json
 
 import pyarrow as pa
@@ -14,17 +15,23 @@ from nyc_mobility.ingestion import green_taxi, weather
 def no_network(monkeypatch):
     def unexpected_request(*args, **kwargs):
         pytest.fail("Tests must not access the network")
+
     monkeypatch.setattr(requests, "get", unexpected_request)
 
 
 @pytest.fixture
 def weather_data():
-    return {"hourly": {"time": ["2026-03-01T00:00"],
-                       **{name: [1.0] for name in weather.HOURLY_VARIABLES}}}
+    return {
+        "hourly": {
+            "time": ["2026-03-01T00:00"],
+            **{name: [1.0] for name in weather.HOURLY_VARIABLES},
+        }
+    }
 
 
-@pytest.mark.parametrize("timestamps", [[None], [123], ["invalid"],
-                                        ["2026-03-01T00:00"] * 2])
+@pytest.mark.parametrize(
+    "timestamps", [[None], [123], ["invalid"], ["2026-03-01T00:00"] * 2]
+)
 def test_weather_rejects_invalid_timestamps(weather_data, timestamps):
     weather_data["hourly"]["time"] = timestamps
     for name in weather.HOURLY_VARIABLES:
@@ -41,24 +48,32 @@ def test_weather_rejects_mismatched_arrays(weather_data):
 
 def test_weather_download_and_reuse(tmp_path, monkeypatch, weather_data):
     content = json.dumps(weather_data).encode()
+
     class Response:
         status_code = 200
+
         def raise_for_status(self):
             pass
+
         def json(self):
             return weather_data
+
     response = Response()
     response.content = content
     calls = []
+
     def get(*args, **kwargs):
         calls.append(kwargs)
         return response
+
     monkeypatch.setattr(requests, "get", get)
     for _ in range(2):
         weather.download_weather("2026-03-01", "2026-03-01", tmp_path)
     assert len(calls) == 1
     assert (tmp_path / "weather_2026-03-01_2026-03-01.json").read_bytes() == content
-    metadata = json.loads((tmp_path / "weather_2026-03-01_2026-03-01_metadata.json").read_text())
+    metadata = json.loads(
+        (tmp_path / "weather_2026-03-01_2026-03-01_metadata.json").read_text()
+    )
     assert metadata["request_parameters"]["timezone"] == weather.TIMEZONE
     assert not list(tmp_path.glob("*.part"))
 
@@ -86,9 +101,24 @@ def test_zones_reuses_valid_file(tmp_path):
     assert zones.profile_csv(path)["row_count"] == 1
 
 
-@pytest.mark.parametrize("table", [pa.table({"wrong": [1]}), pa.table({
-    name: [] for name in ("VendorID", "lpep_pickup_datetime",
-                         "lpep_dropoff_datetime", "PULocationID", "DOLocationID")})])
+@pytest.mark.parametrize(
+    "table",
+    [
+        pa.table({"wrong": [1]}),
+        pa.table(
+            {
+                name: []
+                for name in (
+                    "VendorID",
+                    "lpep_pickup_datetime",
+                    "lpep_dropoff_datetime",
+                    "PULocationID",
+                    "DOLocationID",
+                )
+            }
+        ),
+    ],
+)
 def test_green_rejects_wrong_schema_or_empty_parquet(tmp_path, table):
     path = tmp_path / "bad.parquet"
     pq.write_table(table, path)
@@ -100,13 +130,17 @@ def test_green_failed_download_cleans_partial_file(tmp_path, monkeypatch):
     class Response:
         def __enter__(self):
             return self
+
         def __exit__(self, *args):
             pass
+
         def raise_for_status(self):
             pass
+
         def iter_content(self, **kwargs):
             yield b"incomplete"
             raise requests.ConnectionError("interrupted")
+
     monkeypatch.setattr(requests, "get", lambda *a, **kw: Response())
     inventory = {}
     assert not green_taxi.download_month("03", inventory, tmp_path)
@@ -116,9 +150,21 @@ def test_green_failed_download_cleans_partial_file(tmp_path, monkeypatch):
 
 def test_green_reuses_file_and_saves_inventory(tmp_path):
     path = tmp_path / "green_tripdata_2026-03.parquet"
-    pq.write_table(pa.table({name: [1] for name in (
-        "VendorID", "lpep_pickup_datetime", "lpep_dropoff_datetime",
-        "PULocationID", "DOLocationID")}), path)
+    pq.write_table(
+        pa.table(
+            {
+                name: [1]
+                for name in (
+                    "VendorID",
+                    "lpep_pickup_datetime",
+                    "lpep_dropoff_datetime",
+                    "PULocationID",
+                    "DOLocationID",
+                )
+            }
+        ),
+        path,
+    )
     inventory = tmp_path / "inventory.csv"
     assert green_taxi.ingest_green_taxi("03", tmp_path, inventory) == 0
     record = green_taxi.load_inventory(inventory)[path.name]

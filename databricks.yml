@@ -1,0 +1,151 @@
+bundle:
+  name: nyc-mobility
+  databricks_cli_version: ">= 0.294.0"
+
+sync:
+  include:
+    - notebooks/**
+    - src/**
+    - tests/sql/**
+    - pyproject.toml
+    - requirements.txt
+  exclude:
+    - "**/__pycache__/**"
+    - "**/*.pyc"
+    - data/**
+
+variables:
+  service_principal_name:
+    description: Application ID used as the production run identity.
+  catalog:
+    description: Unity Catalog catalog used by pipeline-managed tables.
+    default: nyc_mobility
+  bronze_schema:
+    default: nyc_bronze
+  silver_schema:
+    default: nyc_silver
+  gold_schema:
+    default: nyc_gold
+  quality_schema:
+    default: nyc_quality
+  landing_path:
+    description: Existing external Unity Catalog Volume landing directory.
+    default: /Volumes/nyc_mobility/nyc_group_c/nyc_source_files/landing
+  timezone:
+    default: America/New_York
+  analysis_start_date:
+    default: "2026-03-01"
+  analysis_end_date:
+    default: "2026-05-31"
+
+resources:
+  pipelines:
+    medallion_pipeline:
+      name: nyc-mobility-medallion
+      catalog: ${var.catalog}
+      schema: ${var.bronze_schema}
+      root_path: ${workspace.file_path}/src
+      serverless: true
+      continuous: false
+      channel: CURRENT
+      edition: ADVANCED
+      photon: true
+      development: false
+      allow_duplicate_names: false
+      cascade_on_destroy: false
+      configuration:
+        nyc_mobility.catalog: ${var.catalog}
+        nyc_mobility.bronze_schema: ${var.bronze_schema}
+        nyc_mobility.silver_schema: ${var.silver_schema}
+        nyc_mobility.gold_schema: ${var.gold_schema}
+        nyc_mobility.quality_schema: ${var.quality_schema}
+        nyc_mobility.landing_path: ${var.landing_path}
+        nyc_mobility.timezone: ${var.timezone}
+        nyc_mobility.analysis_start_date: ${var.analysis_start_date}
+        nyc_mobility.analysis_end_date: ${var.analysis_end_date}
+      libraries:
+        - glob:
+            include: ${workspace.file_path}/src/nyc_mobility/transformations/**
+      tags:
+        application: nyc-mobility
+        managed-by: bundle
+
+  jobs:
+    mobility_workflow:
+      name: nyc-mobility-workflow
+      description: >-
+        Idempotently prepares schemas, lands source files, and refreshes the
+        Bronze, Silver, and Gold Lakeflow graph.
+      max_concurrent_runs: 1
+      timeout_seconds: 14400
+      queue:
+        enabled: true
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "4"
+            dependencies:
+              - -r ${workspace.file_path}/requirements.txt
+      tasks:
+        - task_key: setup_environment
+          environment_key: default
+          timeout_seconds: 900
+          max_retries: 1
+          min_retry_interval_millis: 60000
+          retry_on_timeout: true
+          notebook_task:
+            notebook_path: ./notebooks/00_setup.py
+
+        - task_key: land_raw_sources
+          depends_on:
+            - task_key: setup_environment
+          environment_key: default
+          timeout_seconds: 7200
+          max_retries: 3
+          min_retry_interval_millis: 120000
+          retry_on_timeout: true
+          notebook_task:
+            notebook_path: ./notebooks/01_land_raw_sources.py
+
+        - task_key: refresh_medallion_pipeline
+          depends_on:
+            - task_key: land_raw_sources
+          timeout_seconds: 7200
+          max_retries: 1
+          min_retry_interval_millis: 300000
+          retry_on_timeout: true
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.medallion_pipeline.id}
+            full_refresh: false
+      tags:
+        application: nyc-mobility
+        managed-by: bundle
+
+targets:
+  development:
+    mode: development
+    default: true
+    variables:
+      catalog: nyc_mobility_dev
+    resources:
+      pipelines:
+        medallion_pipeline:
+          development: true
+
+  production:
+    mode: production
+    run_as:
+      service_principal_name: ${var.service_principal_name}
+    permissions:
+      - level: CAN_MANAGE
+        group_name: admins
+    resources:
+      pipelines:
+        medallion_pipeline:
+          development: false
+      jobs:
+        mobility_workflow:
+          schedule:
+            quartz_cron_expression: "0 0 6 * * ?"
+            timezone_id: America/New_York
+            pause_status: PAUSED
