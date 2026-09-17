@@ -3,7 +3,7 @@
 
 **Owner:** Tina (QA/Reconciliation scope)  
 **Date:** 2026-09-17  
-**Status:** PREPARATION COMPLETE — TESTS PENDING SILVER/GOLD IMPLEMENTATION
+**Status:** QA SCAFFOLDING — TESTS PENDING SILVER/GOLD IMPLEMENTATION
 
 ---
 
@@ -187,7 +187,7 @@ Expected Silver tables include:
 - `nyc_mobility.nyc_silver.silver_weather_hourly`
 - `nyc_mobility.nyc_silver.silver_taxi_zones`
 
-The corresponding Silver transformation directory currently contains only its existing placeholder/`.gitkeep` state.
+Silver transformations are being delivered in separate reviewed PRs. These checks must be activated only after the final Silver schemas land.
 
 ### Gold dependencies
 
@@ -271,13 +271,13 @@ These are **test-design assumptions**, not claims that the downstream tables alr
 
 ## M. Final QA State
 
-**Issue #47 QA preparation is complete.**
+**Issue #47 QA scaffolding is prepared but acceptance is not complete.**
 
-- 12 new QA test files added.
+- 12 QA scaffolding files added.
 - Existing Silver/Gold/business placeholders retained.
 - No placeholder file was replaced or deleted.
 - Silver/Gold SQL tests are prepared but pending implementation.
 - Incremental and idempotency tests are prepared but pending the actual loading mechanism.
 - Existing Bronze/raw/unit tests remain available for execution.
 
-The next step is to implement and finalize the Silver/Gold pipeline layers, then activate and execute the prepared QA checks.
+The next step is to merge the reviewed Silver/Gold implementations, activate these checks, execute them, and attach PASS/FAIL evidence before closing Issue #47.
