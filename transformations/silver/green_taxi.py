@@ -109,11 +109,10 @@ def silver_green_taxi_trips():
         .withColumn("is_candidate_duplicate", F.col("candidate_group_size") > 1)
         .withColumn(
             "trip_key",
-            F.sha2(
-                F.to_json(F.struct(*[F.col(c) for c in SOURCE_RECORD_COLS]), options={"ignoreNullFields": "false"}),
-                256,
-            ),
-        )
+            F.xxhash64(
+                F.to_json(F.struct(*[F.col(c) for c in SOURCE_RECORD_COLS]), options={"ignoreNullFields": "false"})
+        ),
+    )
     )
 
     return df.select(
