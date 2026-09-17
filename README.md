@@ -78,7 +78,7 @@ pytest -q
 2. Run `notebooks/01_land_raw_sources.py`.
 3. Configure the pipeline using the repository configuration under `config/`.
 4. Run the applicable Bronze, Silver, and Gold transformations after their reviewed implementations land.
-5. Run validation and reconciliation checks before analytics.
+5. Run validation and reconciliation checks before promotion to `testing`.
 
 Raw data lives in the external Volume and is not committed to Git.
 
@@ -90,11 +90,20 @@ Raw data lives in the external Volume and is not committed to Git.
 - [Taxi Zones source profile](docs/contracts/taxi_zones_source_profile.md)
 - [Evidence](docs/evidence/)
 
-## Branch workflow
+## DevOps branch workflow
+
+| Branch | Environment | Purpose |
+|---|---|---|
+| `development` | Development | Integrates reviewed feature and fix branches |
+| `testing` | Testing/QA | Holds release candidates for validation |
+| `main` | Production | Contains only approved production releases |
 
 ```text
-feature branch -> pull request to development -> review + green CI -> development
-development -> reviewed release pull request -> main
+feature/* or fix/* -> pull request -> development
+development -> release pull request -> testing
+testing -> production pull request -> main
 ```
+
+Every promotion requires a pull request, review, and green CI. Do not push feature work directly to `testing` or `main`.
 
 Do not commit credentials, raw datasets, local environments, generated caches, or Databricks checkpoints.
