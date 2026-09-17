@@ -15,6 +15,9 @@ CANDIDATE_KEY = [
     "do_location_id",
 ]
 
+# The source-record columns make the key stable across reruns.
+# This Silver key is a deterministic BIGINT technical key, not the
+# sequence-generated surrogate key used by the Gold fact table.
 SOURCE_RECORD_COLS = [
     "vendor_id",
     "pickup_ts_local",
@@ -110,9 +113,14 @@ def silver_green_taxi_trips():
         .withColumn(
             "trip_key",
             F.xxhash64(
-                F.to_json(F.struct(*[F.col(c) for c in SOURCE_RECORD_COLS]), options={"ignoreNullFields": "false"})
-        ),
-    )
+                F.to_json(
+                    F.struct(
+                        *[F.col(column) for column in SOURCE_RECORD_COLS]
+                    ),
+                    options={"ignoreNullFields": "false"},
+                )
+            ),
+        )
     )
 
     return df.select(
