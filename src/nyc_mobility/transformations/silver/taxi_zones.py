@@ -230,6 +230,11 @@ def silver_taxi_zones():
         )
 
         .withColumn(
+            "silver_processed_at",
+            F.current_timestamp(),
+        )
+
+        .withColumn(
             "quality_status",
             F.when(
                 F.col("has_invalid_location_id")
