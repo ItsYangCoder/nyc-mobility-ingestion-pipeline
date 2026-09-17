@@ -85,7 +85,7 @@ def silver_green_taxi_trips():
         df
         .withColumn("pickup_date_local", F.to_date("pickup_ts_local"))
         .withColumn("dropoff_date_local", F.to_date("dropoff_ts_local"))
-        .withColumn("pickup_hour_local", F.date_trunc("hour", "pickup_ts_local"))
+        .withColumn("pickup_hour_local", F.date_trunc("hour", "pickup_ts_local").cast("timestamp_ntz"))
         .withColumn("_pickup_ts_utc", F.to_utc_timestamp("pickup_ts_local", "America/New_York"))
         .withColumn("_dropoff_ts_utc", F.to_utc_timestamp("dropoff_ts_local", "America/New_York"))
         .withColumn("trip_duration_minutes", (F.unix_timestamp("_dropoff_ts_utc") - F.unix_timestamp("_pickup_ts_utc")) / 60.0)
