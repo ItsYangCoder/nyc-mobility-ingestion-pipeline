@@ -36,6 +36,9 @@ SELECT
     SUM(CASE WHEN pu_location_id IS NULL THEN 1 ELSE 0 END) AS null_pickup_zone,
     SUM(CASE WHEN do_location_id IS NULL THEN 1 ELSE 0 END) AS null_dropoff_zone,
     SUM(CASE WHEN source_file IS NULL THEN 1 ELSE 0 END) AS null_source_file,
+    SUM(
+        CASE WHEN source_file_modified_at IS NULL THEN 1 ELSE 0 END
+    ) AS null_source_file_modified_at,
     SUM(CASE WHEN ingested_at IS NULL THEN 1 ELSE 0 END) AS null_ingested_at
 FROM nyc_mobility.nyc_silver.silver_green_taxi_trips;
 
@@ -105,6 +108,7 @@ WITH metrics AS (
             OR pu_location_id IS NULL
             OR do_location_id IS NULL
             OR source_file IS NULL
+            OR source_file_modified_at IS NULL
             OR ingested_at IS NULL
         ) AS missing_required_rows,
         COUNT(DISTINCT CASE
