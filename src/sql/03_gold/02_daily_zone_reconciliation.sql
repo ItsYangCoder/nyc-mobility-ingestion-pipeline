@@ -1,3 +1,0 @@
--- TEMPLATE: enable after gold_mobility_daily_zone is implemented.
--- Validate uniqueness of pickup_date_local + pu_location_id and reconcile daily
--- trip_count and additive measures to the hourly Gold output.

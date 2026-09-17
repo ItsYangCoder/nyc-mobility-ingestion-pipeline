@@ -1,3 +1,0 @@
--- TEMPLATE — Business question 1
--- When and where is taxi demand highest?
--- Required output: documented trip counts by day, hour, and taxi zone.

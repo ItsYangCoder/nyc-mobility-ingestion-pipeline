@@ -1,5 +1,5 @@
--- NYC Mobility setup verification
--- Safe, read-only statements for Databricks SQL.
+-- Purpose: verify that the expected catalog and layer schemas are visible.
+-- Safety: read-only metadata statements.
 
 SHOW SCHEMAS IN nyc_mobility;
 SHOW TABLES IN nyc_mobility.nyc_bronze;
