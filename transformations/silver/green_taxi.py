@@ -42,7 +42,10 @@ SOURCE_RECORD_COLS = [
 @dp.materialized_view(
     name="nyc_mobility.nyc_silver.silver_green_taxi_trips",
     comment="Typed and quality-flagged NYC Green Taxi trip records.",
-    table_properties={"quality": "silver"},
+    table_properties={
+        "quality": "silver",
+        "delta.feature.timestampNtz": "supported",
+    },
 )
 @dp.expect("trip_key_present", "trip_key IS NOT NULL")
 @dp.expect("pickup_timestamp_present", "pickup_ts_local IS NOT NULL")
