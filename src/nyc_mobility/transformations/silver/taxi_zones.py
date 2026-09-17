@@ -82,6 +82,7 @@ def silver_taxi_zones():
             ).alias("had_control_char"),
 
             F.col("_source_file"),
+            F.col("_source_file_modified_at"),
             F.col("_ingested_at"),
         )
     )
@@ -128,6 +129,9 @@ def silver_taxi_zones():
 
             F.max("_source_file")
             .alias("_source_file"),
+
+            F.max("_source_file_modified_at")
+            .alias("_source_file_modified_at"),
 
             F.max("_ingested_at")
             .alias("_ingested_at"),
@@ -188,6 +192,7 @@ def silver_taxi_zones():
             .alias("business_variants"),
 
             "_source_file",
+            "_source_file_modified_at",
             "_ingested_at",
             "source_row_count",
             "duplicate_row_count",
