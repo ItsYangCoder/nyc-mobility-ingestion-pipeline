@@ -1,5 +1,0 @@
--- TEMPLATE: enable after silver_weather_hourly is implemented.
--- Validate 2,208 source positions before DST/key handling, positional array
--- alignment, unique weather_hour_local, units, missing hours, and lineage.
---
--- SELECT COUNT(*) FROM nyc_mobility.nyc_silver.silver_weather_hourly;
