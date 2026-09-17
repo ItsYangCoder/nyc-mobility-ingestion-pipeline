@@ -90,6 +90,7 @@ def silver_green_taxi_trips():
         F.col("_source_file").alias("source_file"),
         F.col("_source_file_modified_at").alias("source_file_modified_at"),
         F.col("_ingested_at").alias("ingested_at"),
+        F.current_timestamp().alias("silver_processed_at"),
     )
 
     df = (
@@ -168,4 +169,5 @@ def silver_green_taxi_trips():
         "source_file",
         "source_file_modified_at",
         "ingested_at",
+        "silver_processed_at",
     )
