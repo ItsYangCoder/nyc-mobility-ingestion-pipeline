@@ -1,17 +1,19 @@
 import argparse
 import csv
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 
 import requests
 
+from nyc_mobility.config import CONFIG
+from nyc_mobility.logging import configure_logging, get_logger, log_event
 
-SOURCE_URL = (
-    "https://d37ci6vzurychx.cloudfront.net/misc/taxi_zone_lookup.csv"
-)
+SOURCE_URL = CONFIG.taxi_zones_source_url
 DEFAULT_OUTPUT_DIR = Path("data/raw/taxi_zones")
 REQUIRED_COLUMNS = {"LocationID", "Zone", "Borough"}
+LOGGER = get_logger(__name__)
 
 
 def profile_csv(file_path: Path) -> dict[str, object]:
@@ -24,9 +26,7 @@ def profile_csv(file_path: Path) -> dict[str, object]:
         columns = reader.fieldnames
         missing_columns = REQUIRED_COLUMNS - set(columns)
         if missing_columns:
-            raise ValueError(
-                f"Missing required columns: {sorted(missing_columns)}"
-            )
+            raise ValueError(f"Missing required columns: {sorted(missing_columns)}")
 
         row_count = 0
         null_location_ids = 0
@@ -53,10 +53,17 @@ def profile_csv(file_path: Path) -> dict[str, object]:
             f"{duplicate_location_ids} duplicate value(s)."
         )
 
-    print(f"Rows: {row_count}")
-    print(f"Columns: {columns}")
-    print(f"Null LocationID values: {null_location_ids}")
-    print(f"Duplicate LocationID values: {duplicate_location_ids}")
+    log_event(
+        LOGGER,
+        logging.INFO,
+        "taxi_zones.profile_validated",
+        "Taxi Zones source profile passed",
+        file_path=file_path,
+        row_count=row_count,
+        columns=columns,
+        null_location_ids=null_location_ids,
+        duplicate_location_ids=duplicate_location_ids,
+    )
     return {"row_count": row_count, "columns": columns}
 
 
@@ -69,16 +76,27 @@ def download_or_reuse(
     metadata_file = output_dir / "taxi_zone_lookup_metadata.json"
 
     if output_file.exists():
-        print(f"Existing file found: {output_file}")
-        print("Verifying existing file...")
         profile_csv(output_file)
-        print("Existing file is valid. Download skipped.")
-        print(f"File size: {output_file.stat().st_size} bytes")
+        log_event(
+            LOGGER,
+            logging.INFO,
+            "taxi_zones.reused",
+            "Existing Taxi Zones file is valid; download skipped",
+            output_file=output_file,
+            file_size_bytes=output_file.stat().st_size,
+        )
         return
 
     temp_file = output_file.with_suffix(".csv.part")
     metadata_temp = metadata_file.with_suffix(".json.part")
-    print(f"Downloading from: {SOURCE_URL}")
+    log_event(
+        LOGGER,
+        logging.INFO,
+        "taxi_zones.download_started",
+        "Downloading Taxi Zones source",
+        source_url=SOURCE_URL,
+        output_file=output_file,
+    )
 
     try:
         response = requests.get(SOURCE_URL, timeout=30)
@@ -86,9 +104,7 @@ def download_or_reuse(
         temp_file.write_bytes(response.content)
         profile = profile_csv(temp_file)
 
-        retrieval_time = datetime.now().astimezone().isoformat(
-            timespec="seconds"
-        )
+        retrieval_time = datetime.now().astimezone().isoformat(timespec="seconds")
         metadata = {
             "source_url": SOURCE_URL,
             "retrieved_at": retrieval_time,
@@ -106,12 +122,19 @@ def download_or_reuse(
         if metadata_temp.exists():
             metadata_temp.unlink()
 
-    print(f"Downloaded and verified: {output_file}")
-    print(f"Saved metadata: {metadata_file}")
-    print(f"File size: {output_file.stat().st_size} bytes")
+    log_event(
+        LOGGER,
+        logging.INFO,
+        "taxi_zones.download_completed",
+        "Taxi Zones source downloaded and validated",
+        output_file=output_file,
+        metadata_file=metadata_file,
+        file_size_bytes=output_file.stat().st_size,
+    )
 
 
 def main() -> None:
+    configure_logging()
     parser = argparse.ArgumentParser(
         description="Download and validate the NYC Taxi Zone lookup CSV."
     )

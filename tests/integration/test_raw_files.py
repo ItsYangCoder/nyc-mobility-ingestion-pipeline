@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pyarrow.parquet as parquet
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
 
@@ -102,9 +101,7 @@ def as_date(value: object) -> date | None:
 
     if isinstance(value, str):
         try:
-            return datetime.fromisoformat(
-                value.replace("Z", "+00:00")
-            ).date()
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).date()
         except ValueError:
             return None
 
@@ -145,9 +142,7 @@ def check_green_taxi(
     pickup_values = table["lpep_pickup_datetime"].to_pylist()
     pickup_dates = [as_date(value) for value in pickup_values]
 
-    valid_dates = {
-        value for value in pickup_dates if value is not None
-    }
+    valid_dates = {value for value in pickup_dates if value is not None}
 
     expected_start, expected_end = month_bounds(expected_month)
 
@@ -158,26 +153,20 @@ def check_green_taxi(
         )
         return False, metrics
 
-    invalid_dates = sum(
-        value is None for value in pickup_dates
-    )
+    invalid_dates = sum(value is None for value in pickup_dates)
 
     outside_month = sum(
-        value is not None
-        and not expected_start <= value <= expected_end
+        value is not None and not expected_start <= value <= expected_end
         for value in pickup_dates
     )
 
-    key_columns = [
-        table[name].to_pylist()
-        for name in GREEN_TAXI_CANDIDATE_KEY
-    ]
+    key_columns = [table[name].to_pylist() for name in GREEN_TAXI_CANDIDATE_KEY]
 
     seen_keys = set()
     duplicate_keys = 0
     missing_key_rows = 0
 
-    for key in zip(*key_columns):
+    for key in zip(*key_columns, strict=True):
         if any(value is None for value in key):
             missing_key_rows += 1
 
@@ -246,10 +235,7 @@ def check_weather(
 
     try:
         parsed = [
-            datetime.fromisoformat(
-                value.replace("Z", "+00:00")
-            )
-            for value in timestamps
+            datetime.fromisoformat(value.replace("Z", "+00:00")) for value in timestamps
         ]
     except (AttributeError, ValueError) as error:
         print(f"FAIL | Invalid timestamp: {error}")
@@ -259,18 +245,12 @@ def check_weather(
     metrics["duplicates"] = duplicate_timestamps
 
     if duplicate_timestamps:
-        print(
-            "FAIL | Duplicate weather timestamps detected: "
-            f"{duplicate_timestamps:,}"
-        )
+        print(f"FAIL | Duplicate weather timestamps detected: {duplicate_timestamps:,}")
         return False, metrics
 
     expected_start, expected_end = month_bounds(expected_month)
 
-    actual_dates = {
-        value.date()
-        for value in parsed
-    }
+    actual_dates = {value.date() for value in parsed}
 
     expected_dates = {
         date(
@@ -293,17 +273,13 @@ def check_weather(
 
 
 def check_weather_metadata(weather_path: Path) -> bool:
-    metadata_path = weather_path.with_name(
-        f"{weather_path.stem}_metadata.json"
-    )
+    metadata_path = weather_path.with_name(f"{weather_path.stem}_metadata.json")
 
     if not check_file(metadata_path):
         return False
 
     try:
-        metadata = json.loads(
-            metadata_path.read_text(encoding="utf-8")
-        )
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         print(f"FAIL | Invalid weather metadata: {error}")
         return False
@@ -315,16 +291,10 @@ def check_weather_metadata(weather_path: Path) -> bool:
         "units",
     }
 
-    missing = (
-        required - set(metadata)
-        if isinstance(metadata, dict)
-        else required
-    )
+    missing = required - set(metadata) if isinstance(metadata, dict) else required
 
     if missing:
-        print(
-            f"FAIL | Weather metadata missing fields: {sorted(missing)}"
-        )
+        print(f"FAIL | Weather metadata missing fields: {sorted(missing)}")
         return False
 
     print("PASS | Weather acquisition metadata is recorded")
@@ -368,18 +338,11 @@ def check_taxi_zones(
         print("FAIL | CSV contains zero rows")
         return False, metrics
 
-    ids = [
-        (row.get("LocationID") or "").strip()
-        for row in rows
-    ]
+    ids = [(row.get("LocationID") or "").strip() for row in rows]
 
-    missing_ids = sum(
-        not value for value in ids
-    )
+    missing_ids = sum(not value for value in ids)
 
-    duplicate_ids = len(
-        [value for value in ids if value]
-    ) - len(
+    duplicate_ids = len([value for value in ids if value]) - len(
         {value for value in ids if value}
     )
 
@@ -388,15 +351,11 @@ def check_taxi_zones(
 
     if missing_ids or duplicate_ids:
         print(
-            f"FAIL | Missing LocationID: {missing_ids:,}; "
-            f"duplicates: {duplicate_ids:,}"
+            f"FAIL | Missing LocationID: {missing_ids:,}; duplicates: {duplicate_ids:,}"
         )
         return False, metrics
 
-    print(
-        f"PASS | Rows: {len(rows):,}; "
-        "LocationID is complete and unique"
-    )
+    print(f"PASS | Rows: {len(rows):,}; LocationID is complete and unique")
     print(f"INFO | Missing LocationID: {missing_ids:,}")
     print(f"INFO | Duplicate LocationID: {duplicate_ids:,}")
 
@@ -427,16 +386,11 @@ def check_green_taxi_inventory() -> bool:
             rows = list(reader)
 
     except (OSError, csv.Error) as error:
-        print(
-            f"FAIL | Could not read Green Taxi inventory: {error}"
-        )
+        print(f"FAIL | Could not read Green Taxi inventory: {error}")
         return False
 
     if missing or not rows:
-        print(
-            "FAIL | Green Taxi inventory missing fields: "
-            f"{sorted(missing)}"
-        )
+        print(f"FAIL | Green Taxi inventory missing fields: {sorted(missing)}")
         return False
 
     print("PASS | Green Taxi acquisition metadata is recorded")
@@ -512,9 +466,7 @@ def main() -> int:
         failures += not passed
 
     if failures:
-        print(
-            f"FAIL | {failures} check(s) need attention."
-        )
+        print(f"FAIL | {failures} check(s) need attention.")
         return 1
 
     print("PASS | All raw-data verification checks passed.")

@@ -9,11 +9,10 @@ from pyspark.sql.types import (
     StructType,
 )
 
+from nyc_mobility.config import load_config
 
-LANDING_PATH = spark.conf.get(
-    "nyc_mobility.landing_path",
-    "/Volumes/nyc_mobility/nyc_group_c/nyc_source_files/landing",
-)
+CONFIG = load_config(spark)
+LANDING_PATH = CONFIG.landing_path
 
 TAXI_ZONES_SCHEMA = StructType(
     [
@@ -42,9 +41,7 @@ def bronze_taxi_zones_raw():
         .select(
             "*",
             F.col("_metadata.file_path").alias("_source_file"),
-            F.col("_metadata.file_modification_time").alias(
-                "_source_file_modified_at"
-            ),
+            F.col("_metadata.file_modification_time").alias("_source_file_modified_at"),
             F.current_timestamp().alias("_ingested_at"),
         )
     )

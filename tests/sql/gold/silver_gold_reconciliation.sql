@@ -1,42 +1,24 @@
--- PENDING: Enable after Gold tables are implemented
--- Silver → Gold row-count reconciliation
--- Validates that Gold fact tables reconcile to eligible Silver records
+-- Eligible Silver-to-Gold row reconciliation. Every row must return PASS.
 
-WITH silver_taxi AS (
-  SELECT COUNT(*) AS silver_count
-  FROM nyc_mobility.nyc_silver.silver_green_taxi_trips
-  -- Add WHERE clause for eligible records if Silver has filtering logic
-),
-gold_taxi AS (
-  SELECT COUNT(*) AS gold_count
-  FROM nyc_mobility.nyc_gold.fact_taxi_trip
-),
-silver_weather AS (
-  SELECT COUNT(*) AS silver_count
-  FROM nyc_mobility.nyc_silver.silver_weather_hourly
-),
-gold_weather AS (
-  SELECT COUNT(*) AS gold_count
-  FROM nyc_mobility.nyc_gold.fact_weather_hourly
+WITH counts AS (
+    SELECT 'taxi' AS fact,
+           (SELECT COUNT(*)
+            FROM nyc_mobility.nyc_silver.silver_green_taxi_trips
+            WHERE is_in_analysis_window
+              AND pickup_ts_local IS NOT NULL
+              AND dropoff_ts_local IS NOT NULL
+              AND pu_location_id IS NOT NULL
+              AND do_location_id IS NOT NULL) AS eligible_silver_rows,
+           (SELECT COUNT(*) FROM nyc_mobility.nyc_gold.fact_taxi_trip) AS gold_rows
+    UNION ALL
+    SELECT 'weather',
+           (SELECT COUNT(*)
+            FROM nyc_mobility.nyc_silver.silver_weather_hourly
+            WHERE is_in_analysis_window),
+           (SELECT COUNT(*) FROM nyc_mobility.nyc_gold.fact_weather_hourly)
 )
-SELECT 
-  'taxi' AS fact,
-  s.silver_count AS silver_rows,
-  g.gold_count AS gold_rows,
-  s.silver_count - g.gold_count AS difference,
-  CASE 
-    WHEN s.silver_count = g.gold_count THEN 'MATCH'
-    ELSE 'REVIEW - Document exclusion logic'
-  END AS status
-FROM silver_taxi s, gold_taxi g
-UNION ALL
-SELECT 
-  'weather' AS fact,
-  s.silver_count AS silver_rows,
-  g.gold_count AS gold_rows,
-  s.silver_count - g.gold_count AS difference,
-  CASE 
-    WHEN s.silver_count = g.gold_count THEN 'MATCH'
-    ELSE 'REVIEW - Document exclusion logic'
-  END AS status
-FROM silver_weather s, gold_weather g;
+SELECT fact, eligible_silver_rows, gold_rows,
+       gold_rows - eligible_silver_rows AS row_difference,
+       CASE WHEN eligible_silver_rows = gold_rows THEN 'PASS' ELSE 'FAIL' END AS status
+FROM counts
+ORDER BY fact;

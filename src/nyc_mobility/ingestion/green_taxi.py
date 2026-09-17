@@ -1,14 +1,17 @@
 import argparse
 import csv
-from datetime import datetime, timezone
+import logging
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pyarrow.parquet as parquet
 import requests
 
+from nyc_mobility.config import CONFIG
+from nyc_mobility.logging import configure_logging, get_logger, log_event
 
-BASE_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data"
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+BASE_URL = CONFIG.green_taxi_base_url
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "data" / "raw" / "green_taxi"
 DEFAULT_INVENTORY_PATH = PROJECT_ROOT / "docs" / "green_taxi_inventory.csv"
 MONTHS = ("03", "04", "05")
@@ -20,14 +23,20 @@ INVENTORY_FIELDS = (
     "row_count",
     "columns",
 )
+LOGGER = get_logger(__name__)
 
 
 def inspect_parquet(path: Path) -> tuple[int, list[str]]:
     parquet_file = parquet.ParquetFile(path)
     row_count = parquet_file.metadata.num_rows
     columns = parquet_file.schema_arrow.names
-    required = {"VendorID", "lpep_pickup_datetime", "lpep_dropoff_datetime",
-                "PULocationID", "DOLocationID"}
+    required = {
+        "VendorID",
+        "lpep_pickup_datetime",
+        "lpep_dropoff_datetime",
+        "PULocationID",
+        "DOLocationID",
+    }
     missing = required - set(columns)
     if missing:
         raise ValueError(f"Missing required columns: {sorted(missing)}")
@@ -44,9 +53,7 @@ def load_inventory(inventory_path: Path) -> dict[str, dict[str, str]]:
         return {row["filename"]: row for row in csv.DictReader(file)}
 
 
-def save_inventory(
-    records: dict[str, dict[str, object]], inventory_path: Path
-) -> None:
+def save_inventory(records: dict[str, dict[str, object]], inventory_path: Path) -> None:
     inventory_path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = inventory_path.with_suffix(".csv.part")
 
@@ -94,25 +101,43 @@ def download_month(
                 str(existing["retrieved_at_utc"])
                 if existing
                 else datetime.fromtimestamp(
-                    output_path.stat().st_mtime, timezone.utc
+                    output_path.stat().st_mtime, UTC
                 ).isoformat()
             )
             inventory[filename] = inventory_record(
                 filename, url, output_path, row_count, columns, retrieved_at
             )
-            print(
-                f"Verified existing file, download skipped: "
-                f"{filename} ({row_count:,} rows)"
+            log_event(
+                LOGGER,
+                logging.INFO,
+                "green_taxi.reused",
+                "Existing Green Taxi file is valid; download skipped",
+                filename=filename,
+                output_path=output_path,
+                row_count=row_count,
+                file_size_bytes=output_path.stat().st_size,
             )
             return True
         except Exception as error:
-            print(
-                f"Existing file is unreadable and will be replaced: "
-                f"{filename} ({error})"
+            log_event(
+                LOGGER,
+                logging.WARNING,
+                "green_taxi.existing_invalid",
+                "Existing Green Taxi file is unreadable and will be replaced",
+                filename=filename,
+                error=str(error),
             )
 
     try:
-        print(f"Downloading: {url}")
+        log_event(
+            LOGGER,
+            logging.INFO,
+            "green_taxi.download_started",
+            "Downloading Green Taxi source",
+            filename=filename,
+            source_url=url,
+            output_path=output_path,
+        )
         with requests.get(url, stream=True, timeout=(10, 60)) as response:
             response.raise_for_status()
             with temp_path.open("wb") as file:
@@ -122,26 +147,57 @@ def download_month(
 
         row_count, columns = inspect_parquet(temp_path)
         temp_path.replace(output_path)
-        retrieved_at = datetime.now(timezone.utc).isoformat()
+        retrieved_at = datetime.now(UTC).isoformat()
         inventory[filename] = inventory_record(
             filename, url, output_path, row_count, columns, retrieved_at
         )
-        print(f"Downloaded and verified: {filename} ({row_count:,} rows)")
+        log_event(
+            LOGGER,
+            logging.INFO,
+            "green_taxi.download_completed",
+            "Green Taxi source downloaded and validated",
+            filename=filename,
+            output_path=output_path,
+            row_count=row_count,
+            file_size_bytes=output_path.stat().st_size,
+        )
         return True
     except requests.HTTPError as error:
         status_code = (
-            error.response.status_code
-            if error.response is not None
-            else "unknown"
+            error.response.status_code if error.response is not None else "unknown"
         )
-        print(
-            f"Unavailable file: {filename} (HTTP {status_code}). "
-            "No substitute month was downloaded."
+        log_event(
+            LOGGER,
+            logging.ERROR,
+            "green_taxi.http_error",
+            "Green Taxi source is unavailable; no substitute month was downloaded",
+            filename=filename,
+            source_url=url,
+            status_code=status_code,
+            error=str(error),
         )
     except requests.RequestException as error:
-        print(f"Download failed for {filename}: {error}")
+        log_event(
+            LOGGER,
+            logging.ERROR,
+            "green_taxi.request_failed",
+            "Green Taxi download failed",
+            filename=filename,
+            source_url=url,
+            error=str(error),
+            exc_info=True,
+        )
     except Exception as error:
-        print(f"Parquet validation or file write failed for {filename}: {error}")
+        log_event(
+            LOGGER,
+            logging.ERROR,
+            "green_taxi.processing_failed",
+            "Green Taxi validation or file write failed",
+            filename=filename,
+            output_path=output_path,
+            error=str(error),
+            exc_info=True,
+        )
     finally:
         if temp_path.exists():
             temp_path.unlink()
@@ -165,15 +221,24 @@ def ingest_green_taxi(
         for selected_month in selected_months
     ]
     save_inventory(inventory, inventory_path)
-    print(f"Inventory: {inventory_path}")
+    log_event(
+        LOGGER,
+        logging.INFO,
+        "green_taxi.inventory_saved",
+        "Green Taxi inventory saved",
+        inventory_path=inventory_path,
+        selected_months=selected_months,
+        successful_files=sum(succeeded),
+        failed_files=len(succeeded) - sum(succeeded),
+    )
     return 0 if all(succeeded) else 1
 
 
 def main() -> int:
+    configure_logging()
     parser = argparse.ArgumentParser(
         description=(
-            "Download and validate NYC TLC Green Taxi data "
-            "for March-May 2026."
+            "Download and validate NYC TLC Green Taxi data for March-May 2026."
         )
     )
     parser.add_argument(
@@ -199,5 +264,7 @@ def main() -> int:
         output_dir=args.output_dir,
         inventory_path=args.inventory_path,
     )
+
+
 if __name__ == "__main__":
     raise SystemExit(main())

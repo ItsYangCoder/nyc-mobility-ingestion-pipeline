@@ -10,3 +10,41 @@ requires-python = ">=3.12"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["nyc_mobility"]
+omit = [
+  "*/transformations/bronze/*.py",
+  "*/transformations/gold/dimensions/*.py",
+  "*/transformations/gold/facts/*.py",
+  "*/transformations/silver/*.py",
+]
+
+[tool.coverage.report]
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "if __name__ == .__main__.:",
+]
+omit = [
+  "*/transformations/bronze/*.py",
+  "*/transformations/gold/dimensions/*.py",
+  "*/transformations/gold/facts/*.py",
+  "*/transformations/silver/*.py",
+]
+show_missing = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "SIM", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"notebooks/*.py" = ["E402", "F821"]
+"src/nyc_mobility/transformations/**/*.py" = ["F821"]

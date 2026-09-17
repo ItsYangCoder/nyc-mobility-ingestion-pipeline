@@ -1,37 +1,31 @@
--- PENDING: Enable after Gold tables are implemented
--- Silver → Gold measure reconciliation
--- Validates that key measures are preserved from Silver to Gold
--- Expected: Sum of measures should match (or be documented if filtered)
+-- Eligible Silver-to-Gold taxi measure reconciliation. Result must return PASS.
 
-WITH silver_measures AS (
-  SELECT 
-    COUNT(*) AS total_rows,
-    SUM(fare_amount) AS total_fare,
-    SUM(total_amount) AS total_amount,
-    SUM(trip_distance) AS total_distance
-  FROM nyc_mobility.nyc_silver.silver_green_taxi_trips
-  -- Add WHERE clause for eligible records if Silver has filtering logic
+WITH eligible_silver AS (
+    SELECT COUNT(*) AS row_count,
+           SUM(CAST(fare_amount AS DECIMAL(20, 4))) AS fare_amount,
+           SUM(CAST(total_amount AS DECIMAL(20, 4))) AS total_amount,
+           SUM(CAST(trip_distance AS DECIMAL(20, 4))) AS trip_distance
+    FROM nyc_mobility.nyc_silver.silver_green_taxi_trips
+    WHERE is_in_analysis_window
+      AND pickup_ts_local IS NOT NULL
+      AND dropoff_ts_local IS NOT NULL
+      AND pu_location_id IS NOT NULL
+      AND do_location_id IS NOT NULL
 ),
-gold_measures AS (
-  SELECT 
-    COUNT(*) AS total_rows,
-    SUM(fare_amount) AS total_fare,
-    SUM(total_amount) AS total_amount,
-    SUM(trip_distance) AS total_distance
-  FROM nyc_mobility.nyc_gold.fact_taxi_trip
+gold AS (
+    SELECT COUNT(*) AS row_count,
+           SUM(CAST(fare_amount AS DECIMAL(20, 4))) AS fare_amount,
+           SUM(CAST(total_amount AS DECIMAL(20, 4))) AS total_amount,
+           SUM(CAST(trip_distance AS DECIMAL(20, 4))) AS trip_distance
+    FROM nyc_mobility.nyc_gold.fact_taxi_trip
 )
-SELECT 
-  'taxi' AS source,
-  s.total_rows AS silver_rows,
-  g.total_rows AS gold_rows,
-  s.total_fare AS silver_fare_sum,
-  g.total_fare AS gold_fare_sum,
-  s.total_amount AS silver_total_sum,
-  g.total_amount AS gold_total_sum,
-  s.total_distance AS silver_distance_sum,
-  g.total_distance AS gold_distance_sum,
-  s.total_fare - g.total_fare AS fare_difference,
-  s.total_amount - g.total_amount AS total_difference,
-  s.total_distance - g.total_distance AS distance_difference
-FROM silver_measures s
-CROSS JOIN gold_measures g;
+SELECT s.row_count AS eligible_silver_rows, g.row_count AS gold_rows,
+       g.fare_amount - s.fare_amount AS fare_difference,
+       g.total_amount - s.total_amount AS total_difference,
+       g.trip_distance - s.trip_distance AS distance_difference,
+       CASE WHEN s.row_count = g.row_count
+                 AND g.fare_amount <=> s.fare_amount
+                 AND g.total_amount <=> s.total_amount
+                 AND g.trip_distance <=> s.trip_distance
+            THEN 'PASS' ELSE 'FAIL' END AS status
+FROM eligible_silver s CROSS JOIN gold g;

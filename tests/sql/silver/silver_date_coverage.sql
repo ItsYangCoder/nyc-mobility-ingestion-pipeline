@@ -1,40 +1,33 @@
--- PENDING: Enable after silver_green_taxi_trips is implemented
--- Silver date coverage validation
--- Validates that Silver covers the expected March-May 2026 period
--- Expected: 92 days (31 March + 30 April + 31 May)
+-- March-May 2026 date and hourly weather coverage. Every row must return PASS.
 
-WITH taxi_dates AS (
-  SELECT 
-    DATE(pickup_datetime) AS pickup_date,
-    COUNT(*) AS trip_count
-  FROM nyc_mobility.nyc_silver.silver_green_taxi_trips
-  WHERE pickup_datetime >= DATE('2026-03-01') 
-    AND pickup_datetime < DATE('2026-06-01')
-  GROUP BY DATE(pickup_datetime)
+WITH expected_dates AS (
+    SELECT EXPLODE(
+        SEQUENCE(DATE '2026-03-01', DATE '2026-05-31', INTERVAL 1 DAY)
+    ) AS expected_date
 ),
-weather_dates AS (
-  SELECT 
-    DATE(weather_timestamp) AS weather_date,
-    COUNT(*) AS hour_count
-  FROM nyc_mobility.nyc_silver.silver_weather_hourly
-  WHERE weather_timestamp >= DATE('2026-03-01') 
-    AND weather_timestamp < DATE('2026-06-01')
-  GROUP BY DATE(weather_timestamp)
+taxi AS (
+    SELECT DISTINCT pickup_date_local AS observed_date
+    FROM nyc_mobility.nyc_silver.silver_green_taxi_trips
+    WHERE is_in_analysis_window
+),
+weather_daily AS (
+    SELECT weather_date_local AS observed_date, COUNT(*) AS observed_hours
+    FROM nyc_mobility.nyc_silver.silver_weather_hourly
+    WHERE is_in_analysis_window
+    GROUP BY weather_date_local
+),
+daily_results AS (
+    SELECT 'taxi_date' AS check_name, COUNT_IF(t.observed_date IS NULL) AS failures
+    FROM expected_dates e LEFT JOIN taxi t ON e.expected_date = t.observed_date
+    UNION ALL
+    SELECT 'weather_date', COUNT_IF(w.observed_date IS NULL)
+    FROM expected_dates e LEFT JOIN weather_daily w ON e.expected_date = w.observed_date
+    UNION ALL
+    SELECT 'weather_24_hours_per_day',
+           COUNT_IF(w.observed_hours != 24 OR w.observed_hours IS NULL)
+    FROM expected_dates e LEFT JOIN weather_daily w ON e.expected_date = w.observed_date
 )
-SELECT 
-  'taxi' AS source,
-  COUNT(DISTINCT pickup_date) AS distinct_dates,
-  MIN(pickup_date) AS min_date,
-  MAX(pickup_date) AS max_date,
-  92 AS expected_dates,
-  92 - COUNT(DISTINCT pickup_date) AS missing_dates
-FROM taxi_dates
-UNION ALL
-SELECT 
-  'weather' AS source,
-  COUNT(DISTINCT weather_date) AS distinct_dates,
-  MIN(weather_date) AS min_date,
-  MAX(weather_date) AS max_date,
-  92 AS expected_dates,
-  92 - COUNT(DISTINCT weather_date) AS missing_dates
-FROM weather_dates;
+SELECT check_name, failures,
+       CASE WHEN failures = 0 THEN 'PASS' ELSE 'FAIL' END AS status
+FROM daily_results
+ORDER BY check_name;

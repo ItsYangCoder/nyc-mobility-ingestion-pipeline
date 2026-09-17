@@ -1,6 +1,9 @@
-# Databricks configuration
+# Runtime configuration
 
-Use `catalog_and_schemas.yml` as the naming contract for the complete pipeline.
+`src/nyc_mobility/config.py` is the single naming and runtime configuration
+source for local ingestion, Databricks notebooks, and Lakeflow transformations.
+Do not duplicate operational paths or table names in notebooks or pipeline
+modules.
 
 | Purpose | Namespace |
 |---|---|
@@ -11,6 +14,15 @@ Use `catalog_and_schemas.yml` as the naming contract for the complete pipeline.
 | Gold tables | `nyc_mobility.nyc_gold` |
 | Quality outputs | `nyc_mobility.nyc_quality` |
 
-The landing schema is for the external Volume only. Configure the Lakeflow
-pipeline source root as `src/nyc_mobility/transformations/`. Promote changes
-through `development`, `testing`, and `main`.
+Configuration precedence is Spark configuration (`nyc_mobility.*`), environment
+variables (`NYC_MOBILITY_*`), then safe defaults. See `.env.example` for every
+supported environment variable. Real credentials must use Databricks secret
+scopes and must never be added to this configuration.
+
+The landing schema is for the external Volume only. The Lakeflow source root is
+`src/nyc_mobility/transformations/`. Promote changes through `development`,
+`testing`, and `main`.
+
+Bundle variables in `databricks.yml` are passed to Spark configuration and are
+therefore resolved automatically by `load_config(spark)` inside notebooks and
+Lakeflow definitions.
