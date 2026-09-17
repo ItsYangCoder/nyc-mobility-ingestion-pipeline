@@ -90,3 +90,52 @@ ORDER BY pickup_month;
 -- pickup_hour_local = timestamp_ntz
 
 DESCRIBE TABLE nyc_mobility.nyc_silver.silver_green_taxi_trips;
+
+-- 8. Final acceptance summary
+-- Every required structural check must return PASS before promotion.
+
+WITH metrics AS (
+    SELECT
+        COUNT(*) AS silver_rows,
+        COUNT(DISTINCT trip_key) AS distinct_trip_keys,
+        COUNT_IF(trip_key IS NULL) AS null_trip_keys,
+        COUNT_IF(
+            pickup_ts_local IS NULL
+            OR dropoff_ts_local IS NULL
+            OR pu_location_id IS NULL
+            OR do_location_id IS NULL
+            OR source_file IS NULL
+            OR ingested_at IS NULL
+        ) AS missing_required_rows,
+        COUNT(DISTINCT CASE
+            WHEN pickup_date_local BETWEEN DATE '2026-03-01'
+                AND DATE '2026-05-31'
+            THEN DATE_FORMAT(pickup_date_local, 'yyyy-MM')
+        END) AS covered_months
+    FROM nyc_mobility.nyc_silver.silver_green_taxi_trips
+),
+bronze AS (
+    SELECT COUNT(*) AS bronze_rows
+    FROM nyc_mobility.nyc_bronze.bronze_green_taxi_raw
+)
+SELECT
+    CASE WHEN b.bronze_rows = m.silver_rows
+        THEN 'PASS' ELSE 'FAIL' END AS row_reconciliation,
+    CASE WHEN m.silver_rows = m.distinct_trip_keys
+            AND m.null_trip_keys = 0
+        THEN 'PASS' ELSE 'FAIL' END AS trip_key_check,
+    CASE WHEN m.missing_required_rows = 0
+        THEN 'PASS' ELSE 'FAIL' END AS required_fields_check,
+    CASE WHEN m.covered_months = 3
+        THEN 'PASS' ELSE 'FAIL' END AS march_to_may_coverage,
+    CASE WHEN
+        b.bronze_rows = m.silver_rows
+        AND m.silver_rows = m.distinct_trip_keys
+        AND m.null_trip_keys = 0
+        AND m.missing_required_rows = 0
+        AND m.covered_months = 3
+        THEN 'PASS'
+        ELSE 'FAIL'
+    END AS overall_status
+FROM bronze b
+CROSS JOIN metrics m;
