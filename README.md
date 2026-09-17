@@ -1,14 +1,7 @@
 # NYC Mobility Data Engineering Pipeline
 
-A Databricks medallion pipeline that combines NYC Green Taxi trips, historical Open-Meteo weather, and NYC Taxi Zones for March-May 2026.
-
-## Business questions
-
-1. When and where is taxi demand highest?
-2. How does weather affect taxi demand and trip behavior?
-3. Which areas show the strongest mobility patterns or opportunities?
-
-The optional NYC DOT advisory source is outside the required scope.
+A Databricks medallion pipeline that combines NYC Green Taxi trips, historical
+Open-Meteo weather, and NYC Taxi Zones for March-May 2026.
 
 ## Architecture
 
@@ -16,41 +9,25 @@ The optional NYC DOT advisory source is outside the required scope.
 Source acquisition -> Unity Catalog Volume -> Bronze -> Silver -> Gold -> Analytics
 ```
 
-- **Ingestion:** reproducible source downloads and raw validation.
-- **Bronze:** source-shaped streaming tables with lineage.
-- **Silver:** typed, standardized, quality-checked source tables.
-- **Gold:** integrated mobility facts and conformed dimensions.
-- **Analytics:** reproducible SQL for the three required business questions.
-
-See [the data model](docs/architecture/data_model.md) and [pipeline runbook](docs/runbooks/pipeline_execution.md).
-
 ## Repository layout
 
 | Path | Purpose |
 |---|---|
-| `ingestion/` | Source acquisition scripts |
-| `transformations/bronze/` | Bronze transformations |
-| `transformations/silver/` | Silver transformations |
-| `transformations/gold/` | Gold transformations |
-| `analytics/` | Business-question SQL and result summaries |
-| `notebooks/` | Ordered Databricks entry points |
-| `src/sql/` | Validation, reconciliation, and analytics SQL |
-| `tests/` | Local unit, integration, and data checks |
-| `docs/` | Architecture, contracts, profiles, runbooks, and evidence |
-| `config/` | Unity Catalog and pipeline naming configuration |
+| `src/nyc_mobility/ingestion/` | Reusable source acquisition modules |
+| `src/nyc_mobility/transformations/bronze/` | Bronze Lakeflow table definitions |
+| `src/nyc_mobility/transformations/silver/` | Silver cleaning and conformance |
+| `src/nyc_mobility/transformations/gold/` | Gold facts, dimensions, and aggregates |
+| `src/sql/00_setup/` | Idempotent catalog and schema setup DDL |
+| `tests/sql/` | Bronze, Silver, and Gold data-quality checks |
+| `tests/unit/` | Offline Python unit tests |
+| `tests/integration/` | Acquisition and pipeline integration tests |
+| `notebooks/` | Thin Databricks orchestration entry points |
+| `analytics/` | Business-question SQL and saved results |
+| `config/` | Catalog, schema, and pipeline configuration |
+| `docs/` | Architecture, contracts, profiles, and runbooks |
 
-## Current status
-
-Implemented foundations include:
-
-- Green Taxi, historical weather, and Taxi Zones acquisition
-- raw-file verification and acquisition evidence
-- Unity Catalog external-volume landing
-- Bronze pipeline structure
-- local ingestion tests and pull-request CI
-- architecture, contracts, runbooks, and validation SQL scaffolding
-
-Silver, Gold, analytics, idempotency evidence, and final release validation are promoted through reviewed pull requests.
+Production logic belongs under `src/`. Notebooks should orchestrate that logic,
+not duplicate it. Validation queries belong under `tests/`.
 
 ## Quick start
 
@@ -60,6 +37,7 @@ Use Python 3.12.
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
+python -m pip install --editable .
 pytest -q
 ```
 
@@ -69,41 +47,24 @@ On Windows PowerShell:
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+python -m pip install --editable .
 pytest -q
 ```
 
 ## Databricks execution
 
-1. Pull the latest `development` branch in the Databricks Git folder.
-2. Run `notebooks/01_land_raw_sources.py`.
-3. Configure the pipeline using the repository configuration under `config/`.
-4. Run the applicable Bronze, Silver, and Gold transformations after their reviewed implementations land.
-5. Run validation and reconciliation checks before promotion to `testing`.
+1. Pull the latest `development` branch.
+2. Run `src/sql/00_setup/00_setup.sql` once per environment.
+3. Run `notebooks/01_land_raw_sources.py`.
+4. Configure the Lakeflow pipeline source root as
+   `src/nyc_mobility/transformations/`.
+5. Run the applicable checks under `tests/sql/` before promotion.
 
-Raw data lives in the external Volume and is not committed to Git.
-
-## Documentation
-
-- [Data model](docs/architecture/data_model.md)
-- [Pipeline execution runbook](docs/runbooks/pipeline_execution.md)
-- [Raw landing runbook](docs/runbooks/raw_landing.md)
-- [Taxi Zones source profile](docs/contracts/taxi_zones_source_profile.md)
-- [Evidence](docs/evidence/)
-
-## DevOps branch workflow
-
-| Branch | Environment | Purpose |
-|---|---|---|
-| `development` | Development | Integrates reviewed feature and fix branches |
-| `testing` | Testing/QA | Holds release candidates for validation |
-| `main` | Production | Contains only approved production releases |
+## Branch workflow
 
 ```text
-feature/* or fix/* -> pull request -> development
-development -> release pull request -> testing
-testing -> production pull request -> main
+feature/* or fix/* -> development -> testing -> main
 ```
 
-Every promotion requires a pull request, review, and green CI. Do not push feature work directly to `testing` or `main`.
-
-Do not commit credentials, raw datasets, local environments, generated caches, or Databricks checkpoints.
+Every promotion requires a pull request, review, and green CI. Do not commit
+credentials, raw datasets, local environments, caches, or checkpoints.

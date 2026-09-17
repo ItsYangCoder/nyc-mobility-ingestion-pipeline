@@ -13,7 +13,7 @@ repo_root = next(
     (
         candidate
         for candidate in (Path.cwd(), Path.cwd().parent)
-        if (candidate / "ingestion").is_dir()
+        if (candidate / "src" / "nyc_mobility").is_dir()
     ),
     None,
 )
@@ -22,11 +22,11 @@ if repo_root is None:
         "Open this notebook from the repository's notebooks folder."
     )
 
-sys.path.insert(0, str(repo_root))
+sys.path.insert(0, str(repo_root / "src"))
 
-from ingestion.download_taxi_zones import download_or_reuse
-from ingestion.green_taxi import ingest_green_taxi
-from ingestion.weather import download_weather
+from nyc_mobility.ingestion.download_taxi_zones import download_or_reuse
+from nyc_mobility.ingestion.green_taxi import ingest_green_taxi
+from nyc_mobility.ingestion.weather import download_weather
 
 LANDING = Path(
     "/Volumes/nyc_mobility/nyc_group_c/nyc_source_files/landing"

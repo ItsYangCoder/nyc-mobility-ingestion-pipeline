@@ -6,8 +6,8 @@ import pyarrow.parquet as pq
 import pytest
 import requests
 
-from ingestion import download_taxi_zones as zones
-from ingestion import green_taxi, weather
+from nyc_mobility.ingestion import download_taxi_zones as zones
+from nyc_mobility.ingestion import green_taxi, weather
 
 
 @pytest.fixture(autouse=True)
