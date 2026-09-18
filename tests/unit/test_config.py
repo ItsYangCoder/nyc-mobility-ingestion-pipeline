@@ -116,4 +116,8 @@ def test_unknown_layer_and_invalid_table_are_rejected():
         config.table("staging", "weather")
 
     with pytest.raises(ValueError, match="Invalid table name"):
-        config.table("silver", "bad-table")
+        config.table(
+            "silver",
+            "bad-table",
+        )
+        
