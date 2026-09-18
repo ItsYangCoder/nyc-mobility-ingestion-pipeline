@@ -15,6 +15,11 @@ class FakeSparkConf:
         return self.values.get(key, default)
 
 
+class UnavailableSparkConf:
+    def get(self, key: str, default: str | None = None) -> str | None:
+        raise RuntimeError("configuration unavailable")
+
+
 def test_defaults_build_expected_paths_and_tables():
     config = PipelineConfig()
 
@@ -58,6 +63,7 @@ def test_spark_configuration_has_highest_precedence():
             }
         )
     )
+
     config = load_config(
         spark=spark,
         environ={
@@ -68,6 +74,20 @@ def test_spark_configuration_has_highest_precedence():
 
     assert config.catalog == "nyc_spark"
     assert config.silver_schema == "silver_spark"
+
+
+def test_unavailable_spark_config_falls_back():
+    spark = SimpleNamespace(conf=UnavailableSparkConf())
+
+    config = load_config(
+        spark=spark,
+        environ={
+            "NYC_MOBILITY_CATALOG": "nyc_env",
+        },
+    )
+
+    assert config.catalog == "nyc_env"
+    assert config.silver_schema == "nyc_silver"
 
 
 @pytest.mark.parametrize(
@@ -94,5 +114,9 @@ def test_unknown_layer_and_invalid_table_are_rejected():
 
     with pytest.raises(ValueError, match="Unsupported layer"):
         config.table("staging", "weather")
+
     with pytest.raises(ValueError, match="Invalid table name"):
-        config.table("silver", "bad-table")
+        config.table(
+            "silver",
+            "bad-table",
+        )
