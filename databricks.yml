@@ -126,7 +126,7 @@ targets:
     mode: development
     default: true
     variables:
-      catalog: nyc_mobility_dev
+      catalog: nyc_mobility
     resources:
       pipelines:
         medallion_pipeline:
