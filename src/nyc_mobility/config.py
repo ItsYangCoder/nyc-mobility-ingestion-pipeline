@@ -171,7 +171,7 @@ def _spark_value(spark: SparkSessionLike | None, key: str) -> str | None:
         return None
     try:
         value = spark.conf.get(key, None)
-    except (AttributeError, KeyError, TypeError):
+    except Exception:
         return None
     return value.strip() if isinstance(value, str) and value.strip() else None
 
