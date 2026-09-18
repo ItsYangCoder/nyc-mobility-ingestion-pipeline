@@ -120,4 +120,3 @@ def test_unknown_layer_and_invalid_table_are_rejected():
             "silver",
             "bad-table",
         )
-        
