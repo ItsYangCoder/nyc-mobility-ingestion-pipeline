@@ -9,7 +9,10 @@ from pathlib import Path
 import pyarrow.parquet as parquet
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+try:
+    PROJECT_ROOT = Path(__file__).resolve().parents[1]
+except NameError:
+    PROJECT_ROOT = Path.cwd().parent
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
 
 GREEN_TAXI_FILES = {

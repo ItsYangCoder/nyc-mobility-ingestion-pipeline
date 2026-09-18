@@ -1,4 +1,8 @@
 # Databricks notebook source
+# /// script
+# [tool.databricks.environment]
+# environment_version = "5"
+# ///
 # MAGIC %md
 # MAGIC # Group C raw landing
 # MAGIC Downloads the three required NYC Mobility sources directly to the
@@ -29,7 +33,7 @@ from ingestion.green_taxi import ingest_green_taxi
 from ingestion.weather import download_weather
 
 LANDING = Path(
-    "/Volumes/nyc_mobility/nyc_group_c/nyc_source_files/landing"
+    "/Volumes/nyc_mobility/nyc_bronze/nyc_source_files/landing/"
 )
 
 # COMMAND ----------
