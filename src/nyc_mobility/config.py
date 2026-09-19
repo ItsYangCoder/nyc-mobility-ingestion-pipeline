@@ -16,6 +16,7 @@ import re
 from dataclasses import dataclass
 from datetime import date
 from typing import Protocol
+from urllib.parse import urlsplit
 
 
 class SparkConfLike(Protocol):
@@ -76,6 +77,21 @@ class PipelineConfig:
             "/"
         ):
             raise ValueError("landing_path_override must be an absolute path")
+
+        for field_name in (
+            "weather_source_url",
+            "green_taxi_base_url",
+            "taxi_zones_source_url",
+        ):
+            value = getattr(self, field_name)
+            try:
+                parsed = urlsplit(value)
+            except ValueError as error:
+                raise ValueError(f"{field_name} must be a valid HTTPS URL") from error
+            if parsed.scheme != "https" or not parsed.hostname:
+                raise ValueError(f"{field_name} must be a valid HTTPS URL")
+            if parsed.username is not None or parsed.password is not None:
+                raise ValueError(f"{field_name} must not contain credentials")
 
     @property
     def landing_path(self) -> str:
