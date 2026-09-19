@@ -102,6 +102,19 @@ def test_unavailable_spark_config_falls_back():
             "must not be after",
         ),
         ({"landing_path_override": "relative/path"}, "absolute path"),
+        (
+            {"weather_source_url": "http://example.com/weather"},
+            "valid HTTPS URL",
+        ),
+        (
+            {
+                "green_taxi_base_url": (
+                    "https://username:password@example.com/trip-data"
+                )
+            },
+            "must not contain credentials",
+        ),
+        ({"taxi_zones_source_url": "not-a-url"}, "valid HTTPS URL"),
     ],
 )
 def test_invalid_configuration_is_rejected(kwargs, message):
