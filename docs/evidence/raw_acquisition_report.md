@@ -204,9 +204,9 @@ Green Taxi anomalies were reported to the source owner for rerun/review as requi
 
 ### Verification Script
 
-`tests/test_raw_files.py`
+`tests/integration/verify_raw_files.py`
 
 ### Run Command
 
 ```bash
-py tests/test_raw_files.py
+python tests/integration/verify_raw_files.py
