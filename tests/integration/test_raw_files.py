@@ -32,7 +32,9 @@ GREEN_TAXI_CANDIDATE_KEY = [
     "DOLocationID",
 ]
 
-GREEN_TAXI_INVENTORY = PROJECT_ROOT / "docs" / "green_taxi_inventory.csv"
+GREEN_TAXI_INVENTORY = (
+    PROJECT_ROOT / "docs" / "evidence" / "green_taxi_inventory.csv"
+)
 
 WEATHER_FILES = {
     "2026-03": RAW_DIR / "weather" / "weather_2026-03-01_2026-03-31.json",

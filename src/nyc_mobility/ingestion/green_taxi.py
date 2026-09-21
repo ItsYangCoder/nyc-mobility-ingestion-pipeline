@@ -13,7 +13,9 @@ from nyc_mobility.logging import configure_logging, get_logger, log_event
 BASE_URL = CONFIG.green_taxi_base_url
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "data" / "raw" / "green_taxi"
-DEFAULT_INVENTORY_PATH = PROJECT_ROOT / "docs" / "green_taxi_inventory.csv"
+DEFAULT_INVENTORY_PATH = (
+    PROJECT_ROOT / "docs" / "evidence" / "green_taxi_inventory.csv"
+)
 MONTHS = ("03", "04", "05")
 INVENTORY_FIELDS = (
     "filename",

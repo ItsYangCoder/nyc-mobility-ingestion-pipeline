@@ -149,7 +149,7 @@ Taxi Zones includes source and retrieval metadata.
 
 The accepted file inventory is represented by:
 
-`docs/green_taxi_inventory.csv`
+`docs/evidence/green_taxi_inventory.csv`
 
 ---
 
