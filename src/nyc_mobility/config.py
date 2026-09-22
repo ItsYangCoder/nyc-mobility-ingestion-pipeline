@@ -268,7 +268,7 @@ def load_notebook_config(
         try:
             value = dbutils.widgets.get(field_name)
         except Exception:
-            continue
+            value = None
         if isinstance(value, str) and value.strip():
             overrides[field_name] = value.strip()
     return load_config(spark=spark, environ=environ, overrides=overrides)
