@@ -62,7 +62,6 @@ resources:
       photon: true
       development: false
       allow_duplicate_names: false
-      cascade_on_destroy: false
       configuration:
         nyc_mobility.catalog: ${var.catalog}
         nyc_mobility.landing_schema: ${var.landing_schema}
@@ -166,6 +165,7 @@ targets:
     default: true
     variables:
       catalog: nyc_mobility
+      service_principal_name: unused-in-development
     resources:
       pipelines:
         medallion_pipeline:
