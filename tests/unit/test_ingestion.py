@@ -125,8 +125,25 @@ def test_zones_rejects_empty_or_invalid_keys(tmp_path, rows):
 def test_zones_reuses_valid_file(tmp_path):
     path = tmp_path / "taxi_zone_lookup.csv"
     path.write_text("LocationID,Borough,Zone\n1,A,B\n")
+    (tmp_path / "taxi_zone_lookup_metadata.json").write_text(
+        json.dumps({"source_url": PipelineConfig().taxi_zones_source_url})
+    )
     zones.download_or_reuse(tmp_path)
     assert zones.profile_csv(path)["row_count"] == 1
+
+
+def test_zones_rejects_reuse_when_source_url_does_not_match(tmp_path):
+    path = tmp_path / "taxi_zone_lookup.csv"
+    path.write_text("LocationID,Borough,Zone\n1,A,B\n")
+    (tmp_path / "taxi_zone_lookup_metadata.json").write_text(
+        json.dumps({"source_url": PipelineConfig().taxi_zones_source_url})
+    )
+    config = PipelineConfig(
+        taxi_zones_source_url="https://example.com/taxi_zone_lookup.csv"
+    )
+
+    with pytest.raises(ValueError, match="source URL does not match"):
+        zones.download_or_reuse(tmp_path, config=config)
 
 
 @pytest.mark.parametrize(

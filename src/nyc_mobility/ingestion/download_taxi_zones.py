@@ -76,7 +76,20 @@ def download_or_reuse(
     metadata_file = output_dir / "taxi_zone_lookup_metadata.json"
 
     if output_file.exists():
-        profile_csv(output_file)
+        try:
+            profile_csv(output_file)
+            with metadata_file.open("r", encoding="utf-8") as file:
+                metadata = json.load(file)
+            if metadata.get("source_url") != config.taxi_zones_source_url:
+                raise ValueError(
+                    "saved source URL does not match current configuration"
+                )
+        except (OSError, json.JSONDecodeError, ValueError) as error:
+            raise ValueError(
+                f"Existing Taxi Zones files are invalid: {output_file}. "
+                "Keep them for investigation, remove or rename them, then rerun. "
+                f"Reason: {error}"
+            ) from error
         log_event(
             LOGGER,
             logging.INFO,
