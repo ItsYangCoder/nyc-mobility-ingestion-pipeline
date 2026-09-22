@@ -24,10 +24,8 @@ class FakeWidgets:
     def __init__(self, values: dict[str, str]):
         self.values = values
 
-    def get(self, name: str) -> str:
-        if name not in self.values:
-            raise KeyError(name)
-        return self.values[name]
+    def getAll(self) -> dict[str, str]:
+        return self.values
 
 
 def test_defaults_build_expected_paths_and_tables():
@@ -121,6 +119,17 @@ def test_notebook_parameters_use_central_config_contract():
 
     assert config.catalog == "notebook_catalog"
     assert config.analysis_months() == ("2027-01", "2027-02")
+
+
+def test_notebook_widget_failures_are_not_hidden():
+    class BrokenWidgets:
+        def getAll(self):
+            raise RuntimeError("Databricks widgets are unavailable")
+
+    dbutils = SimpleNamespace(widgets=BrokenWidgets())
+
+    with pytest.raises(RuntimeError, match="widgets are unavailable"):
+        load_notebook_config(dbutils, environ={})
 
 
 def test_unavailable_spark_config_falls_back():

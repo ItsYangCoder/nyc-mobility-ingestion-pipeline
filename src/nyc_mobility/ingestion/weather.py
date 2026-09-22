@@ -67,8 +67,12 @@ def validate_weather(data: object) -> dict:
     return hourly
 
 
-def load_existing_weather(filename: Path) -> dict | None:
-    """Reuse an existing raw file only after it passes validation."""
+def load_existing_weather(
+    filename: Path,
+    metadata_filename: Path,
+    config: PipelineConfig,
+) -> dict | None:
+    """Reuse raw weather only when data and source metadata still match."""
     if not filename.exists():
         return None
 
@@ -76,6 +80,12 @@ def load_existing_weather(filename: Path) -> dict | None:
         with filename.open("r", encoding="utf-8") as file:
             data = json.load(file)
         validate_weather(data)
+        with metadata_filename.open("r", encoding="utf-8") as file:
+            metadata = json.load(file)
+        if metadata.get("source_url") != config.weather_source_url:
+            raise ValueError("saved source URL does not match current configuration")
+        if metadata.get("timezone") != config.timezone:
+            raise ValueError("saved timezone does not match current configuration")
     except (OSError, json.JSONDecodeError, ValueError) as error:
         raise ValueError(
             f"Existing raw file is invalid: {filename}. "
@@ -109,7 +119,7 @@ def download_weather(
     filename = output_dir / f"weather_{start_date}_{end_date}.json"
     metadata_filename = output_dir / f"weather_{start_date}_{end_date}_metadata.json"
 
-    existing_data = load_existing_weather(filename)
+    existing_data = load_existing_weather(filename, metadata_filename, config)
     if existing_data is not None:
         return
 
@@ -176,6 +186,7 @@ def download_weather(
     metadata_temp = metadata_filename.with_suffix(".json.part")
 
     metadata = {
+        "source_url": config.weather_source_url,
         "retrieved_at": datetime.now().astimezone().isoformat(),
         "request_parameters": params,
         "coordinates": {

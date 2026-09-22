@@ -10,7 +10,6 @@ import requests
 from nyc_mobility.config import CONFIG, PipelineConfig
 from nyc_mobility.logging import configure_logging, get_logger, log_event
 
-SOURCE_URL = CONFIG.taxi_zones_source_url
 DEFAULT_OUTPUT_DIR = Path("data/raw/taxi_zones")
 REQUIRED_COLUMNS = {"LocationID", "Zone", "Borough"}
 LOGGER = get_logger(__name__)

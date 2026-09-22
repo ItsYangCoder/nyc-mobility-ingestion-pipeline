@@ -102,13 +102,13 @@ def download_month(
         try:
             row_count, columns = inspect_parquet(output_path)
             existing = inventory.get(filename)
-            retrieved_at = (
-                str(existing["retrieved_at_utc"])
-                if existing
-                else datetime.fromtimestamp(
-                    output_path.stat().st_mtime, UTC
-                ).isoformat()
-            )
+            if existing is None:
+                raise ValueError("inventory record is missing")
+            if existing.get("source_url") != url:
+                raise ValueError(
+                    "inventory source URL does not match current configuration"
+                )
+            retrieved_at = str(existing["retrieved_at_utc"])
             inventory[filename] = inventory_record(
                 filename, url, output_path, row_count, columns, retrieved_at
             )

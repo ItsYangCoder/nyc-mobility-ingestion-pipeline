@@ -32,7 +32,7 @@ class SparkSessionLike(Protocol):
 
 
 class WidgetsLike(Protocol):
-    def get(self, name: str) -> str: ...
+    def getAll(self) -> Mapping[str, str]: ...
 
 
 class DBUtilsLike(Protocol):
@@ -263,14 +263,12 @@ def load_notebook_config(
     environ: dict[str, str] | None = None,
 ) -> PipelineConfig:
     """Load Databricks task parameters through the central config contract."""
-    overrides: dict[str, str] = {}
-    for field_name in _SETTINGS:
-        try:
-            value = dbutils.widgets.get(field_name)
-        except Exception:
-            value = None
-        if isinstance(value, str) and value.strip():
-            overrides[field_name] = value.strip()
+    widget_values = dbutils.widgets.getAll()
+    overrides = {
+        field_name: value.strip()
+        for field_name, value in widget_values.items()
+        if field_name in _SETTINGS and isinstance(value, str) and value.strip()
+    }
     return load_config(spark=spark, environ=environ, overrides=overrides)
 
 

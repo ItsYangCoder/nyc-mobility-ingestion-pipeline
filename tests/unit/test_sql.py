@@ -71,3 +71,46 @@ def test_setup_sql_uses_configured_catalog_and_schemas():
 def test_invalid_identifier_cannot_enter_rendered_sql():
     with pytest.raises(ValueError, match="valid unquoted identifier"):
         PipelineConfig(catalog="unsafe; DROP CATALOG")
+
+
+def test_every_checked_in_sql_file_renders_non_default_configuration():
+    defaults = PipelineConfig()
+    config = PipelineConfig(
+        catalog="mobility_test",
+        bronze_schema="bronze_test",
+        silver_schema="silver_test",
+        gold_schema="gold_test",
+        quality_schema="quality_test",
+        analysis_start_date="2027-11-01",
+        analysis_end_date="2027-12-31",
+        timezone="UTC",
+    )
+    default_tokens = (
+        f"{defaults.catalog}.{defaults.bronze_schema}",
+        f"{defaults.catalog}.{defaults.silver_schema}",
+        f"{defaults.catalog}.{defaults.gold_schema}",
+        f"{defaults.catalog}.{defaults.quality_schema}",
+        f"CREATE CATALOG IF NOT EXISTS {defaults.catalog}",
+        f"USE CATALOG {defaults.catalog}",
+        f"CREATE SCHEMA IF NOT EXISTS {defaults.bronze_schema}",
+        f"CREATE SCHEMA IF NOT EXISTS {defaults.silver_schema}",
+        f"CREATE SCHEMA IF NOT EXISTS {defaults.gold_schema}",
+        f"CREATE SCHEMA IF NOT EXISTS {defaults.quality_schema}",
+        f"DATE '{defaults.analysis_start_date}'",
+        f"DATE '{defaults.analysis_end_date}'",
+        f"'{defaults.timezone}'",
+        "m.covered_months = 3",
+        "s.in_window_hours = 2208",
+        "SELECT 'weather', COUNT(*), 3",
+    )
+    sql_paths = sorted(Path("src/sql").rglob("*.sql")) + sorted(
+        Path("tests/sql").rglob("*.sql")
+    )
+
+    assert sql_paths
+    for path in sql_paths:
+        source = path.read_text(encoding="utf-8")
+        rendered = render_sql(source, config)
+        for token in default_tokens:
+            if token in source:
+                assert token not in rendered, f"{path} retained default token {token!r}"
