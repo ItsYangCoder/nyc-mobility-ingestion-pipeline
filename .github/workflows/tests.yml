@@ -60,9 +60,15 @@ jobs:
 
           import sqlglot
 
+          from nyc_mobility.config import PipelineConfig
+          from nyc_mobility.sql import render_sql
+
           paths = sorted(Path("tests/sql").rglob("*.sql"))
           for path in paths:
-              sqlglot.parse(path.read_text(), read="databricks")
+              sqlglot.parse(
+                  render_sql(path.read_text(), PipelineConfig()),
+                  read="databricks",
+              )
           print(f"Parsed {len(paths)} Databricks SQL files")
           PY
 
