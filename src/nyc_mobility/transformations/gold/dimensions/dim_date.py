@@ -1,4 +1,4 @@
-"""Gold date dimension for the approved March-May 2026 analysis window."""
+"""Gold date dimension for the configured inclusive analysis window."""
 
 from pyspark import pipelines as dp
 from pyspark.sql import functions as F

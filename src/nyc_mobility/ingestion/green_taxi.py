@@ -7,14 +7,12 @@ from pathlib import Path
 import pyarrow.parquet as parquet
 import requests
 
-from nyc_mobility.config import CONFIG
+from nyc_mobility.config import CONFIG, PipelineConfig
 from nyc_mobility.logging import configure_logging, get_logger, log_event
 
-BASE_URL = CONFIG.green_taxi_base_url
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "data" / "raw" / "green_taxi"
-DEFAULT_INVENTORY_PATH = PROJECT_ROOT / "docs" / "green_taxi_inventory.csv"
-MONTHS = ("03", "04", "05")
+DEFAULT_INVENTORY_PATH = PROJECT_ROOT / "docs" / "evidence" / "green_taxi_inventory.csv"
 INVENTORY_FIELDS = (
     "filename",
     "source_url",
@@ -84,12 +82,19 @@ def inventory_record(
 
 
 def download_month(
-    month: str,
+    period: str,
     inventory: dict[str, dict[str, object]],
     output_dir: Path,
+    base_url: str = CONFIG.green_taxi_base_url,
 ) -> bool:
-    filename = f"green_tripdata_2026-{month}.parquet"
-    url = f"{BASE_URL}/{filename}"
+    try:
+        datetime.strptime(period, "%Y-%m")
+    except ValueError as error:
+        message = f"Invalid Green Taxi period: {period!r}; use YYYY-MM"
+        raise ValueError(message) from error
+
+    filename = f"green_tripdata_{period}.parquet"
+    url = f"{base_url.rstrip('/')}/{filename}"
     output_path = output_dir / filename
     temp_path = output_path.with_suffix(".parquet.part")
 
@@ -97,13 +102,13 @@ def download_month(
         try:
             row_count, columns = inspect_parquet(output_path)
             existing = inventory.get(filename)
-            retrieved_at = (
-                str(existing["retrieved_at_utc"])
-                if existing
-                else datetime.fromtimestamp(
-                    output_path.stat().st_mtime, UTC
-                ).isoformat()
-            )
+            if existing is None:
+                raise ValueError("inventory record is missing")
+            if existing.get("source_url") != url:
+                raise ValueError(
+                    "inventory source URL does not match current configuration"
+                )
+            retrieved_at = str(existing["retrieved_at_utc"])
             inventory[filename] = inventory_record(
                 filename, url, output_path, row_count, columns, retrieved_at
             )
@@ -206,19 +211,32 @@ def download_month(
 
 
 def ingest_green_taxi(
-    month: str,
+    period: str,
     output_dir: Path = DEFAULT_OUTPUT_DIR,
     inventory_path: Path = DEFAULT_INVENTORY_PATH,
+    config: PipelineConfig = CONFIG,
 ) -> int:
     output_dir = Path(output_dir)
     inventory_path = Path(inventory_path)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     inventory = load_inventory(inventory_path)
-    selected_months = MONTHS if month == "all" else (month,)
+    configured_periods = config.analysis_months()
+    selected_periods = configured_periods if period == "all" else (period,)
+    invalid_periods = set(selected_periods) - set(configured_periods)
+    if invalid_periods:
+        raise ValueError(
+            "Green Taxi period must be within the configured analysis window: "
+            f"{sorted(invalid_periods)}"
+        )
     succeeded = [
-        download_month(selected_month, inventory, output_dir)
-        for selected_month in selected_months
+        download_month(
+            selected_period,
+            inventory,
+            output_dir,
+            base_url=config.green_taxi_base_url,
+        )
+        for selected_period in selected_periods
     ]
     save_inventory(inventory, inventory_path)
     log_event(
@@ -227,7 +245,7 @@ def ingest_green_taxi(
         "green_taxi.inventory_saved",
         "Green Taxi inventory saved",
         inventory_path=inventory_path,
-        selected_months=selected_months,
+        selected_periods=selected_periods,
         successful_files=sum(succeeded),
         failed_files=len(succeeded) - sum(succeeded),
     )
@@ -237,14 +255,12 @@ def ingest_green_taxi(
 def main() -> int:
     configure_logging()
     parser = argparse.ArgumentParser(
-        description=(
-            "Download and validate NYC TLC Green Taxi data for March-May 2026."
-        )
+        description="Download and validate configured NYC TLC Green Taxi months."
     )
     parser.add_argument(
-        "month",
-        choices=(*MONTHS, "all"),
-        help="month number (03, 04, 05) or all",
+        "period",
+        choices=(*CONFIG.analysis_months(), "all"),
+        help="configured month in YYYY-MM format, or all",
     )
     parser.add_argument(
         "--output-dir",
@@ -260,9 +276,10 @@ def main() -> int:
     )
     args = parser.parse_args()
     return ingest_green_taxi(
-        args.month,
+        args.period,
         output_dir=args.output_dir,
         inventory_path=args.inventory_path,
+        config=CONFIG,
     )
 
 

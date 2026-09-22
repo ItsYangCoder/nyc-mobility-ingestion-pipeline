@@ -149,7 +149,7 @@ Taxi Zones includes source and retrieval metadata.
 
 The accepted file inventory is represented by:
 
-`docs/green_taxi_inventory.csv`
+`docs/evidence/green_taxi_inventory.csv`
 
 ---
 
@@ -204,9 +204,9 @@ Green Taxi anomalies were reported to the source owner for rerun/review as requi
 
 ### Verification Script
 
-`tests/test_raw_files.py`
+`tests/integration/verify_raw_files.py`
 
 ### Run Command
 
 ```bash
-py tests/test_raw_files.py
+python tests/integration/verify_raw_files.py

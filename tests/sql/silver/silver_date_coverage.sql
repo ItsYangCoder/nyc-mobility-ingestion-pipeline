@@ -1,4 +1,4 @@
--- March-May 2026 date and hourly weather coverage. Every row must return PASS.
+-- Configured-default date and hourly weather coverage. Every row must return PASS.
 
 WITH expected_dates AS (
     SELECT EXPLODE(

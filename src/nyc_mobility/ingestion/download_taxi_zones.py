@@ -7,10 +7,9 @@ from pathlib import Path
 
 import requests
 
-from nyc_mobility.config import CONFIG
+from nyc_mobility.config import CONFIG, PipelineConfig
 from nyc_mobility.logging import configure_logging, get_logger, log_event
 
-SOURCE_URL = CONFIG.taxi_zones_source_url
 DEFAULT_OUTPUT_DIR = Path("data/raw/taxi_zones")
 REQUIRED_COLUMNS = {"LocationID", "Zone", "Borough"}
 LOGGER = get_logger(__name__)
@@ -69,6 +68,7 @@ def profile_csv(file_path: Path) -> dict[str, object]:
 
 def download_or_reuse(
     output_dir: Path = DEFAULT_OUTPUT_DIR,
+    config: PipelineConfig = CONFIG,
 ) -> None:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -76,7 +76,20 @@ def download_or_reuse(
     metadata_file = output_dir / "taxi_zone_lookup_metadata.json"
 
     if output_file.exists():
-        profile_csv(output_file)
+        try:
+            profile_csv(output_file)
+            with metadata_file.open("r", encoding="utf-8") as file:
+                metadata = json.load(file)
+            if metadata.get("source_url") != config.taxi_zones_source_url:
+                raise ValueError(
+                    "saved source URL does not match current configuration"
+                )
+        except (OSError, json.JSONDecodeError, ValueError) as error:
+            raise ValueError(
+                f"Existing Taxi Zones files are invalid: {output_file}. "
+                "Keep them for investigation, remove or rename them, then rerun. "
+                f"Reason: {error}"
+            ) from error
         log_event(
             LOGGER,
             logging.INFO,
@@ -94,19 +107,19 @@ def download_or_reuse(
         logging.INFO,
         "taxi_zones.download_started",
         "Downloading Taxi Zones source",
-        source_url=SOURCE_URL,
+        source_url=config.taxi_zones_source_url,
         output_file=output_file,
     )
 
     try:
-        response = requests.get(SOURCE_URL, timeout=30)
+        response = requests.get(config.taxi_zones_source_url, timeout=30)
         response.raise_for_status()
         temp_file.write_bytes(response.content)
         profile = profile_csv(temp_file)
 
         retrieval_time = datetime.now().astimezone().isoformat(timespec="seconds")
         metadata = {
-            "source_url": SOURCE_URL,
+            "source_url": config.taxi_zones_source_url,
             "retrieved_at": retrieval_time,
             "file_size_bytes": temp_file.stat().st_size,
             **profile,

@@ -1,0 +1,12 @@
+-- NYC Mobility pipeline-health dashboard query.
+--
+-- TODO(mafelisilda): Implement after the run-audit table contract is approved.
+-- The dashboard query should show, at minimum:
+--   * latest workflow status and last successful run
+--   * process date, started/ended timestamps, and duration
+--   * failed task/error context when status is FAIL
+--   * freshness, layer row counts, and DQ status
+--
+-- Keep PASS/WARN/FAIL semantics aligned with docs/monitoring.md and the DQ
+-- contract. Use configuration-safe catalog/schema resolution; do not hard-code
+-- production-specific targets into a reusable monitoring query.

@@ -7,6 +7,7 @@ import pyarrow.parquet as pq
 import pytest
 import requests
 
+from nyc_mobility.config import PipelineConfig
 from nyc_mobility.ingestion import download_taxi_zones as zones
 from nyc_mobility.ingestion import green_taxi, weather
 
@@ -75,6 +76,7 @@ def test_weather_download_and_reuse(tmp_path, monkeypatch, weather_data):
         (tmp_path / "weather_2026-03-01_2026-03-01_metadata.json").read_text()
     )
     assert metadata["request_parameters"]["timezone"] == weather.TIMEZONE
+    assert metadata["source_url"] == PipelineConfig().weather_source_url
     assert not list(tmp_path.glob("*.part"))
 
 
@@ -84,6 +86,32 @@ def test_weather_preserves_invalid_existing_file(tmp_path):
     with pytest.raises(ValueError, match="Existing raw file is invalid"):
         weather.download_weather("2026-03-01", "2026-03-01", tmp_path)
     assert path.read_text() == "invalid"
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        PipelineConfig(weather_source_url="https://example.com/weather"),
+        PipelineConfig(timezone="UTC"),
+    ],
+)
+def test_weather_rejects_reuse_when_metadata_does_not_match(
+    tmp_path, weather_data, config
+):
+    raw_path = tmp_path / "weather_2026-03-01_2026-03-01.json"
+    raw_path.write_text(json.dumps(weather_data))
+    metadata_path = tmp_path / "weather_2026-03-01_2026-03-01_metadata.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "source_url": PipelineConfig().weather_source_url,
+                "timezone": PipelineConfig().timezone,
+            }
+        )
+    )
+
+    with pytest.raises(ValueError, match="Existing raw file is invalid"):
+        weather.download_weather("2026-03-01", "2026-03-01", tmp_path, config=config)
 
 
 @pytest.mark.parametrize("rows", ["", "1,A,B\n1,C,D\n", ",A,B\n"])
@@ -97,8 +125,25 @@ def test_zones_rejects_empty_or_invalid_keys(tmp_path, rows):
 def test_zones_reuses_valid_file(tmp_path):
     path = tmp_path / "taxi_zone_lookup.csv"
     path.write_text("LocationID,Borough,Zone\n1,A,B\n")
+    (tmp_path / "taxi_zone_lookup_metadata.json").write_text(
+        json.dumps({"source_url": PipelineConfig().taxi_zones_source_url})
+    )
     zones.download_or_reuse(tmp_path)
     assert zones.profile_csv(path)["row_count"] == 1
+
+
+def test_zones_rejects_reuse_when_source_url_does_not_match(tmp_path):
+    path = tmp_path / "taxi_zone_lookup.csv"
+    path.write_text("LocationID,Borough,Zone\n1,A,B\n")
+    (tmp_path / "taxi_zone_lookup_metadata.json").write_text(
+        json.dumps({"source_url": PipelineConfig().taxi_zones_source_url})
+    )
+    config = PipelineConfig(
+        taxi_zones_source_url="https://example.com/taxi_zone_lookup.csv"
+    )
+
+    with pytest.raises(ValueError, match="source URL does not match"):
+        zones.download_or_reuse(tmp_path, config=config)
 
 
 @pytest.mark.parametrize(
@@ -143,7 +188,7 @@ def test_green_failed_download_cleans_partial_file(tmp_path, monkeypatch):
 
     monkeypatch.setattr(requests, "get", lambda *a, **kw: Response())
     inventory = {}
-    assert not green_taxi.download_month("03", inventory, tmp_path)
+    assert not green_taxi.download_month("2026-03", inventory, tmp_path)
     assert inventory == {}
     assert list(tmp_path.iterdir()) == []
 
@@ -166,7 +211,113 @@ def test_green_reuses_file_and_saves_inventory(tmp_path):
         path,
     )
     inventory = tmp_path / "inventory.csv"
-    assert green_taxi.ingest_green_taxi("03", tmp_path, inventory) == 0
+    green_taxi.save_inventory(
+        {
+            path.name: green_taxi.inventory_record(
+                path.name,
+                (
+                    f"{PipelineConfig().green_taxi_base_url}/"
+                    "green_tripdata_2026-03.parquet"
+                ),
+                path,
+                1,
+                ["VendorID"],
+                "2026-03-01T00:00:00+00:00",
+            )
+        },
+        inventory,
+    )
+    assert green_taxi.ingest_green_taxi("2026-03", tmp_path, inventory) == 0
     record = green_taxi.load_inventory(inventory)[path.name]
     assert record["row_count"] == "1"
     assert int(record["file_size_bytes"]) == path.stat().st_size
+
+
+def test_green_redownloads_when_inventory_source_url_does_not_match(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "green_tripdata_2026-03.parquet"
+    table = pa.table(
+        {
+            name: [1]
+            for name in (
+                "VendorID",
+                "lpep_pickup_datetime",
+                "lpep_dropoff_datetime",
+                "PULocationID",
+                "DOLocationID",
+            )
+        }
+    )
+    pq.write_table(table, path)
+    inventory = {
+        path.name: {
+            "source_url": "https://old.example/green_tripdata_2026-03.parquet",
+            "retrieved_at_utc": "2026-03-01T00:00:00+00:00",
+        }
+    }
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def raise_for_status(self):
+            pass
+
+        def iter_content(self, **kwargs):
+            yield path.read_bytes()
+
+    monkeypatch.setattr(requests, "get", lambda *a, **kw: Response())
+
+    assert green_taxi.download_month(
+        "2026-03", inventory, tmp_path, "https://new.example"
+    )
+    assert inventory[path.name]["source_url"] == (
+        "https://new.example/green_tripdata_2026-03.parquet"
+    )
+
+
+def test_green_taxi_uses_configured_year_and_month(tmp_path, monkeypatch):
+    config = PipelineConfig(
+        analysis_start_date="2027-11-01",
+        analysis_end_date="2027-12-31",
+    )
+    downloaded = []
+
+    def download(period, inventory, output_dir, base_url):
+        downloaded.append((period, base_url))
+        return True
+
+    monkeypatch.setattr(green_taxi, "download_month", download)
+
+    assert (
+        green_taxi.ingest_green_taxi(
+            "all",
+            tmp_path,
+            tmp_path / "inventory.csv",
+            config=config,
+        )
+        == 0
+    )
+    assert downloaded == [
+        ("2027-11", config.green_taxi_base_url),
+        ("2027-12", config.green_taxi_base_url),
+    ]
+
+
+def test_green_taxi_rejects_period_outside_config(tmp_path):
+    config = PipelineConfig(
+        analysis_start_date="2027-11-01",
+        analysis_end_date="2027-11-30",
+    )
+
+    with pytest.raises(ValueError, match="configured analysis window"):
+        green_taxi.ingest_green_taxi(
+            "2027-12",
+            tmp_path,
+            tmp_path / "inventory.csv",
+            config=config,
+        )

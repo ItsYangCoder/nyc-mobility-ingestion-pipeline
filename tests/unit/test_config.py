@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from nyc_mobility.config import PipelineConfig, load_config
+from nyc_mobility.config import PipelineConfig, load_config, load_notebook_config
 
 
 class FakeSparkConf:
@@ -18,6 +18,14 @@ class FakeSparkConf:
 class UnavailableSparkConf:
     def get(self, key: str, default: str | None = None) -> str | None:
         raise RuntimeError("configuration unavailable")
+
+
+class FakeWidgets:
+    def __init__(self, values: dict[str, str]):
+        self.values = values
+
+    def getAll(self) -> dict[str, str]:
+        return self.values
 
 
 def test_defaults_build_expected_paths_and_tables():
@@ -34,6 +42,9 @@ def test_defaults_build_expected_paths_and_tables():
         ("2026-04-01", "2026-04-30"),
         ("2026-05-01", "2026-05-31"),
     )
+    assert config.analysis_months() == ("2026-03", "2026-04", "2026-05")
+    assert config.analysis_month_count == 3
+    assert config.expected_weather_hours == 2208
 
 
 def test_environment_overrides_defaults():
@@ -76,6 +87,51 @@ def test_spark_configuration_has_highest_precedence():
     assert config.silver_schema == "silver_spark"
 
 
+def test_explicit_databricks_parameters_have_highest_precedence():
+    spark = SimpleNamespace(conf=FakeSparkConf({"nyc_mobility.catalog": "spark"}))
+
+    config = load_config(
+        spark=spark,
+        environ={"NYC_MOBILITY_CATALOG": "environment"},
+        overrides={"catalog": "task_parameter"},
+    )
+
+    assert config.catalog == "task_parameter"
+
+
+def test_unknown_explicit_override_is_rejected():
+    with pytest.raises(ValueError, match="Unknown configuration override"):
+        load_config(overrides={"catlog": "typo"})
+
+
+def test_notebook_parameters_use_central_config_contract():
+    dbutils = SimpleNamespace(
+        widgets=FakeWidgets(
+            {
+                "catalog": "notebook_catalog",
+                "analysis_start_date": "2027-01-01",
+                "analysis_end_date": "2027-02-28",
+            }
+        )
+    )
+
+    config = load_notebook_config(dbutils, environ={})
+
+    assert config.catalog == "notebook_catalog"
+    assert config.analysis_months() == ("2027-01", "2027-02")
+
+
+def test_notebook_widget_failures_are_not_hidden():
+    class BrokenWidgets:
+        def getAll(self):
+            raise RuntimeError("Databricks widgets are unavailable")
+
+    dbutils = SimpleNamespace(widgets=BrokenWidgets())
+
+    with pytest.raises(RuntimeError, match="widgets are unavailable"):
+        load_notebook_config(dbutils, environ={})
+
+
 def test_unavailable_spark_config_falls_back():
     spark = SimpleNamespace(conf=UnavailableSparkConf())
 
@@ -102,6 +158,19 @@ def test_unavailable_spark_config_falls_back():
             "must not be after",
         ),
         ({"landing_path_override": "relative/path"}, "absolute path"),
+        (
+            {"weather_source_url": "http://example.com/weather"},
+            "valid HTTPS URL",
+        ),
+        (
+            {
+                "green_taxi_base_url": (
+                    "https://username:password@example.com/trip-data"
+                )
+            },
+            "must not contain credentials",
+        ),
+        ({"taxi_zones_source_url": "not-a-url"}, "valid HTTPS URL"),
     ],
 )
 def test_invalid_configuration_is_rejected(kwargs, message):

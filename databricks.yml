@@ -20,6 +20,10 @@ variables:
   catalog:
     description: Unity Catalog catalog used by pipeline-managed tables.
     default: nyc_mobility
+  landing_schema:
+    default: nyc_group_c
+  landing_volume:
+    default: nyc_source_files
   bronze_schema:
     default: nyc_bronze
   silver_schema:
@@ -37,6 +41,12 @@ variables:
     default: "2026-03-01"
   analysis_end_date:
     default: "2026-05-31"
+  weather_source_url:
+    default: https://archive-api.open-meteo.com/v1/archive
+  green_taxi_base_url:
+    default: https://d37ci6vzurychx.cloudfront.net/trip-data
+  taxi_zones_source_url:
+    default: https://d37ci6vzurychx.cloudfront.net/misc/taxi_zone_lookup.csv
 
 resources:
   pipelines:
@@ -52,9 +62,10 @@ resources:
       photon: true
       development: false
       allow_duplicate_names: false
-      cascade_on_destroy: false
       configuration:
         nyc_mobility.catalog: ${var.catalog}
+        nyc_mobility.landing_schema: ${var.landing_schema}
+        nyc_mobility.landing_volume: ${var.landing_volume}
         nyc_mobility.bronze_schema: ${var.bronze_schema}
         nyc_mobility.silver_schema: ${var.silver_schema}
         nyc_mobility.gold_schema: ${var.gold_schema}
@@ -63,6 +74,9 @@ resources:
         nyc_mobility.timezone: ${var.timezone}
         nyc_mobility.analysis_start_date: ${var.analysis_start_date}
         nyc_mobility.analysis_end_date: ${var.analysis_end_date}
+        nyc_mobility.weather_source_url: ${var.weather_source_url}
+        nyc_mobility.green_taxi_base_url: ${var.green_taxi_base_url}
+        nyc_mobility.taxi_zones_source_url: ${var.taxi_zones_source_url}
       libraries:
         - glob:
             include: ${workspace.file_path}/src/nyc_mobility/transformations/**
@@ -95,6 +109,15 @@ resources:
           retry_on_timeout: true
           notebook_task:
             notebook_path: ./notebooks/00_setup.py
+            base_parameters:
+              catalog: ${var.catalog}
+              landing_schema: ${var.landing_schema}
+              landing_volume: ${var.landing_volume}
+              landing_path_override: ${var.landing_path}
+              bronze_schema: ${var.bronze_schema}
+              silver_schema: ${var.silver_schema}
+              gold_schema: ${var.gold_schema}
+              quality_schema: ${var.quality_schema}
 
         - task_key: land_raw_sources
           depends_on:
@@ -106,6 +129,21 @@ resources:
           retry_on_timeout: true
           notebook_task:
             notebook_path: ./notebooks/01_land_raw_sources.py
+            base_parameters:
+              catalog: ${var.catalog}
+              landing_schema: ${var.landing_schema}
+              landing_volume: ${var.landing_volume}
+              landing_path_override: ${var.landing_path}
+              bronze_schema: ${var.bronze_schema}
+              silver_schema: ${var.silver_schema}
+              gold_schema: ${var.gold_schema}
+              quality_schema: ${var.quality_schema}
+              timezone: ${var.timezone}
+              analysis_start_date: ${var.analysis_start_date}
+              analysis_end_date: ${var.analysis_end_date}
+              weather_source_url: ${var.weather_source_url}
+              green_taxi_base_url: ${var.green_taxi_base_url}
+              taxi_zones_source_url: ${var.taxi_zones_source_url}
 
         - task_key: refresh_medallion_pipeline
           depends_on:
@@ -127,6 +165,7 @@ targets:
     default: true
     variables:
       catalog: nyc_mobility
+      service_principal_name: unused-in-development
     resources:
       pipelines:
         medallion_pipeline:

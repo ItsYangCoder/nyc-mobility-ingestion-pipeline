@@ -76,7 +76,7 @@ SELECT
 FROM nyc_mobility.nyc_silver.silver_green_taxi_trips;
 
 
--- 6. Monthly reconciliation for March-May 2026
+-- 6. Monthly reconciliation for the configured default analysis window
 
 SELECT
     DATE_FORMAT(pickup_date_local, 'yyyy-MM') AS pickup_month,

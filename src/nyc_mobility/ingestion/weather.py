@@ -6,7 +6,7 @@ from pathlib import Path
 
 import requests
 
-from nyc_mobility.config import CONFIG
+from nyc_mobility.config import CONFIG, PipelineConfig
 from nyc_mobility.logging import configure_logging, get_logger, log_event
 
 LATITUDE = 40.7128
@@ -67,8 +67,12 @@ def validate_weather(data: object) -> dict:
     return hourly
 
 
-def load_existing_weather(filename: Path) -> dict | None:
-    """Reuse an existing raw file only after it passes validation."""
+def load_existing_weather(
+    filename: Path,
+    metadata_filename: Path,
+    config: PipelineConfig,
+) -> dict | None:
+    """Reuse raw weather only when data and source metadata still match."""
     if not filename.exists():
         return None
 
@@ -76,6 +80,12 @@ def load_existing_weather(filename: Path) -> dict | None:
         with filename.open("r", encoding="utf-8") as file:
             data = json.load(file)
         validate_weather(data)
+        with metadata_filename.open("r", encoding="utf-8") as file:
+            metadata = json.load(file)
+        if metadata.get("source_url") != config.weather_source_url:
+            raise ValueError("saved source URL does not match current configuration")
+        if metadata.get("timezone") != config.timezone:
+            raise ValueError("saved timezone does not match current configuration")
     except (OSError, json.JSONDecodeError, ValueError) as error:
         raise ValueError(
             f"Existing raw file is invalid: {filename}. "
@@ -98,6 +108,7 @@ def download_weather(
     start_date: str,
     end_date: str,
     output_dir: Path = DEFAULT_OUTPUT_DIR,
+    config: PipelineConfig = CONFIG,
 ) -> None:
     """Download and validate one date range without overwriting valid raw data."""
     if start_date > end_date:
@@ -108,7 +119,7 @@ def download_weather(
     filename = output_dir / f"weather_{start_date}_{end_date}.json"
     metadata_filename = output_dir / f"weather_{start_date}_{end_date}_metadata.json"
 
-    existing_data = load_existing_weather(filename)
+    existing_data = load_existing_weather(filename, metadata_filename, config)
     if existing_data is not None:
         return
 
@@ -118,7 +129,7 @@ def download_weather(
         "start_date": start_date,
         "end_date": end_date,
         "hourly": ",".join(HOURLY_VARIABLES),
-        "timezone": TIMEZONE,
+        "timezone": config.timezone,
     }
 
     log_event(
@@ -126,13 +137,13 @@ def download_weather(
         logging.INFO,
         "weather.download_started",
         "Requesting weather data",
-        source_url=URL,
+        source_url=config.weather_source_url,
         output_file=filename,
         request_parameters=params,
     )
 
     try:
-        response = requests.get(URL, params=params, timeout=30)
+        response = requests.get(config.weather_source_url, params=params, timeout=30)
         log_event(
             LOGGER,
             logging.INFO,
@@ -150,7 +161,7 @@ def download_weather(
             logging.ERROR,
             "weather.request_failed",
             "Weather API request failed",
-            source_url=URL,
+            source_url=config.weather_source_url,
             start_date=start_date,
             end_date=end_date,
             error=str(error),
@@ -175,13 +186,14 @@ def download_weather(
     metadata_temp = metadata_filename.with_suffix(".json.part")
 
     metadata = {
+        "source_url": config.weather_source_url,
         "retrieved_at": datetime.now().astimezone().isoformat(),
         "request_parameters": params,
         "coordinates": {
             "latitude": LATITUDE,
             "longitude": LONGITUDE,
         },
-        "timezone": TIMEZONE,
+        "timezone": config.timezone,
         "units": data.get("hourly_units", {}),
     }
 

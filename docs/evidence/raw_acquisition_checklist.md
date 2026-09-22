@@ -165,4 +165,4 @@
 ### Run Command
 
 ```bash
-py tests/test_raw_files.py
+python tests/integration/verify_raw_files.py

@@ -14,15 +14,17 @@ modules.
 | Gold tables | `nyc_mobility.nyc_gold` |
 | Quality outputs | `nyc_mobility.nyc_quality` |
 
-Configuration precedence is Spark configuration (`nyc_mobility.*`), environment
-variables (`NYC_MOBILITY_*`), then safe defaults. See `.env.example` for every
-supported environment variable. Real credentials must use Databricks secret
-scopes and must never be added to this configuration.
+Configuration precedence is explicit Databricks task parameters, Spark
+configuration (`nyc_mobility.*`), environment variables (`NYC_MOBILITY_*`),
+then safe defaults. See `.env.example` for every supported environment
+variable. Real credentials must use Databricks secret scopes and must never be
+added to this configuration.
 
 The landing schema is for the external Volume only. The Lakeflow source root is
 `src/nyc_mobility/transformations/`. Promote changes through `development`,
 `testing`, and `main`.
 
-Bundle variables in `databricks.yml` are passed to Spark configuration and are
-therefore resolved automatically by `load_config(spark)` inside notebooks and
-Lakeflow definitions.
+Bundle variables in `databricks.yml` are passed as notebook task parameters for
+ingestion/setup and as Spark configuration for Lakeflow. Both paths resolve
+through `PipelineConfig`; changing the configured date window automatically
+changes the Green Taxi month list and weather date ranges.

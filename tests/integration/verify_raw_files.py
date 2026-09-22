@@ -3,18 +3,15 @@
 import csv
 import json
 from calendar import monthrange
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pyarrow.parquet as parquet
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RAW_DIR = PROJECT_ROOT / "data" / "raw"
+from nyc_mobility.config import CONFIG, PipelineConfig
 
-GREEN_TAXI_FILES = {
-    month: RAW_DIR / "green_taxi" / f"green_tripdata_{month}.parquet"
-    for month in ("2026-03", "2026-04", "2026-05")
-}
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+RAW_DIR = PROJECT_ROOT / "data" / "raw"
 
 GREEN_TAXI_REQUIRED_COLUMNS = {
     "VendorID",
@@ -32,13 +29,7 @@ GREEN_TAXI_CANDIDATE_KEY = [
     "DOLocationID",
 ]
 
-GREEN_TAXI_INVENTORY = PROJECT_ROOT / "docs" / "green_taxi_inventory.csv"
-
-WEATHER_FILES = {
-    "2026-03": RAW_DIR / "weather" / "weather_2026-03-01_2026-03-31.json",
-    "2026-04": RAW_DIR / "weather" / "weather_2026-04-01_2026-04-30.json",
-    "2026-05": RAW_DIR / "weather" / "weather_2026-05-01_2026-05-31.json",
-}
+GREEN_TAXI_INVENTORY = PROJECT_ROOT / "docs" / "evidence" / "green_taxi_inventory.csv"
 
 WEATHER_REQUIRED_FIELDS = {
     "time",
@@ -49,6 +40,26 @@ WEATHER_REQUIRED_FIELDS = {
 
 TAXI_ZONES_FILE = RAW_DIR / "taxi_zones" / "taxi_zone_lookup.csv"
 TAXI_ZONES_REQUIRED_COLUMNS = {"LocationID", "Borough", "Zone"}
+
+
+def configured_source_files(
+    config: PipelineConfig,
+    raw_dir: Path,
+) -> tuple[dict[str, Path], dict[str, tuple[Path, str, str]]]:
+    """Build deterministic raw-file expectations from an injected config."""
+    green_taxi_files = {
+        period: raw_dir / "green_taxi" / f"green_tripdata_{period}.parquet"
+        for period in config.analysis_months()
+    }
+    weather_files = {
+        start[:7]: (
+            raw_dir / "weather" / f"weather_{start}_{end}.json",
+            start,
+            end,
+        )
+        for start, end in config.monthly_date_ranges()
+    }
+    return green_taxi_files, weather_files
 
 
 def check_file(path: Path) -> bool:
@@ -189,7 +200,8 @@ def check_green_taxi(
 
 def check_weather(
     path: Path,
-    expected_month: str,
+    expected_start: str,
+    expected_end: str,
 ) -> tuple[bool, dict[str, int]]:
     print(f"\nChecking Weather: {path.name}")
 
@@ -248,17 +260,14 @@ def check_weather(
         print(f"FAIL | Duplicate weather timestamps detected: {duplicate_timestamps:,}")
         return False, metrics
 
-    expected_start, expected_end = month_bounds(expected_month)
+    start_date = date.fromisoformat(expected_start)
+    end_date = date.fromisoformat(expected_end)
 
     actual_dates = {value.date() for value in parsed}
 
     expected_dates = {
-        date(
-            expected_start.year,
-            expected_start.month,
-            day,
-        )
-        for day in range(1, expected_end.day + 1)
+        start_date + timedelta(days=offset)
+        for offset in range((end_date - start_date).days + 1)
     }
 
     if actual_dates != expected_dates:
@@ -362,8 +371,8 @@ def check_taxi_zones(
     return True, metrics
 
 
-def check_green_taxi_inventory() -> bool:
-    if not check_file(GREEN_TAXI_INVENTORY):
+def check_green_taxi_inventory(inventory_path: Path) -> bool:
+    if not check_file(inventory_path):
         return False
 
     required = {
@@ -376,7 +385,7 @@ def check_green_taxi_inventory() -> bool:
     }
 
     try:
-        with GREEN_TAXI_INVENTORY.open(
+        with inventory_path.open(
             "r",
             encoding="utf-8-sig",
             newline="",
@@ -397,10 +406,15 @@ def check_green_taxi_inventory() -> bool:
     return True
 
 
-def main() -> int:
+def main(
+    config: PipelineConfig = CONFIG,
+    raw_dir: Path = RAW_DIR,
+    inventory_path: Path = GREEN_TAXI_INVENTORY,
+) -> int:
     results = []
+    green_taxi_files, weather_files = configured_source_files(config, raw_dir)
 
-    for month, path in GREEN_TAXI_FILES.items():
+    for month, path in green_taxi_files.items():
         passed, metrics = check_green_taxi(path, month)
 
         results.append(
@@ -414,13 +428,13 @@ def main() -> int:
     results.append(
         (
             "Green Taxi metadata",
-            check_green_taxi_inventory(),
+            check_green_taxi_inventory(inventory_path),
             None,
         )
     )
 
-    for month, path in WEATHER_FILES.items():
-        passed, metrics = check_weather(path, month)
+    for month, (path, expected_start, expected_end) in weather_files.items():
+        passed, metrics = check_weather(path, expected_start, expected_end)
 
         results.append(
             (
@@ -438,7 +452,7 @@ def main() -> int:
             )
         )
 
-    passed, metrics = check_taxi_zones(TAXI_ZONES_FILE)
+    passed, metrics = check_taxi_zones(raw_dir / "taxi_zones" / TAXI_ZONES_FILE.name)
 
     results.append(
         (
