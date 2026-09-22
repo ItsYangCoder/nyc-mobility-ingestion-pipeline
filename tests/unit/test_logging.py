@@ -31,7 +31,7 @@ def test_json_log_contains_event_and_context():
     assert payload["event"] == "source.completed"
     assert payload["message"] == "Source completed"
     assert payload["context"] == {
-        "file_path": "/tmp/source.json",
+        "file_path": str(Path("/tmp/source.json")),
         "row_count": 42,
     }
     assert payload["timestamp"].endswith("Z")
