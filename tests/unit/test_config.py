@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from nyc_mobility.config import PipelineConfig, load_config
+from nyc_mobility.config import PipelineConfig, load_config, load_notebook_config
 
 
 class FakeSparkConf:
@@ -18,6 +18,16 @@ class FakeSparkConf:
 class UnavailableSparkConf:
     def get(self, key: str, default: str | None = None) -> str | None:
         raise RuntimeError("configuration unavailable")
+
+
+class FakeWidgets:
+    def __init__(self, values: dict[str, str]):
+        self.values = values
+
+    def get(self, name: str) -> str:
+        if name not in self.values:
+            raise KeyError(name)
+        return self.values[name]
 
 
 def test_defaults_build_expected_paths_and_tables():
@@ -34,6 +44,9 @@ def test_defaults_build_expected_paths_and_tables():
         ("2026-04-01", "2026-04-30"),
         ("2026-05-01", "2026-05-31"),
     )
+    assert config.analysis_months() == ("2026-03", "2026-04", "2026-05")
+    assert config.analysis_month_count == 3
+    assert config.expected_weather_hours == 2208
 
 
 def test_environment_overrides_defaults():
@@ -74,6 +87,40 @@ def test_spark_configuration_has_highest_precedence():
 
     assert config.catalog == "nyc_spark"
     assert config.silver_schema == "silver_spark"
+
+
+def test_explicit_databricks_parameters_have_highest_precedence():
+    spark = SimpleNamespace(conf=FakeSparkConf({"nyc_mobility.catalog": "spark"}))
+
+    config = load_config(
+        spark=spark,
+        environ={"NYC_MOBILITY_CATALOG": "environment"},
+        overrides={"catalog": "task_parameter"},
+    )
+
+    assert config.catalog == "task_parameter"
+
+
+def test_unknown_explicit_override_is_rejected():
+    with pytest.raises(ValueError, match="Unknown configuration override"):
+        load_config(overrides={"catlog": "typo"})
+
+
+def test_notebook_parameters_use_central_config_contract():
+    dbutils = SimpleNamespace(
+        widgets=FakeWidgets(
+            {
+                "catalog": "notebook_catalog",
+                "analysis_start_date": "2027-01-01",
+                "analysis_end_date": "2027-02-28",
+            }
+        )
+    )
+
+    config = load_notebook_config(dbutils, environ={})
+
+    assert config.catalog == "notebook_catalog"
+    assert config.analysis_months() == ("2027-01", "2027-02")
 
 
 def test_unavailable_spark_config_falls_back():

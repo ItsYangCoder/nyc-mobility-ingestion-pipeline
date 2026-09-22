@@ -7,6 +7,7 @@ import pyarrow.parquet as pq
 import pytest
 import requests
 
+from nyc_mobility.config import PipelineConfig
 from nyc_mobility.ingestion import download_taxi_zones as zones
 from nyc_mobility.ingestion import green_taxi, weather
 
@@ -143,7 +144,7 @@ def test_green_failed_download_cleans_partial_file(tmp_path, monkeypatch):
 
     monkeypatch.setattr(requests, "get", lambda *a, **kw: Response())
     inventory = {}
-    assert not green_taxi.download_month("03", inventory, tmp_path)
+    assert not green_taxi.download_month("2026-03", inventory, tmp_path)
     assert inventory == {}
     assert list(tmp_path.iterdir()) == []
 
@@ -166,7 +167,50 @@ def test_green_reuses_file_and_saves_inventory(tmp_path):
         path,
     )
     inventory = tmp_path / "inventory.csv"
-    assert green_taxi.ingest_green_taxi("03", tmp_path, inventory) == 0
+    assert green_taxi.ingest_green_taxi("2026-03", tmp_path, inventory) == 0
     record = green_taxi.load_inventory(inventory)[path.name]
     assert record["row_count"] == "1"
     assert int(record["file_size_bytes"]) == path.stat().st_size
+
+
+def test_green_taxi_uses_configured_year_and_month(tmp_path, monkeypatch):
+    config = PipelineConfig(
+        analysis_start_date="2027-11-01",
+        analysis_end_date="2027-12-31",
+    )
+    downloaded = []
+
+    def download(period, inventory, output_dir, base_url):
+        downloaded.append((period, base_url))
+        return True
+
+    monkeypatch.setattr(green_taxi, "download_month", download)
+
+    assert (
+        green_taxi.ingest_green_taxi(
+            "all",
+            tmp_path,
+            tmp_path / "inventory.csv",
+            config=config,
+        )
+        == 0
+    )
+    assert downloaded == [
+        ("2027-11", config.green_taxi_base_url),
+        ("2027-12", config.green_taxi_base_url),
+    ]
+
+
+def test_green_taxi_rejects_period_outside_config(tmp_path):
+    config = PipelineConfig(
+        analysis_start_date="2027-11-01",
+        analysis_end_date="2027-11-30",
+    )
+
+    with pytest.raises(ValueError, match="configured analysis window"):
+        green_taxi.ingest_green_taxi(
+            "2027-12",
+            tmp_path,
+            tmp_path / "inventory.csv",
+            config=config,
+        )

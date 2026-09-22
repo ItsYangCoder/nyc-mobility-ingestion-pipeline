@@ -2,9 +2,10 @@
 
 Configuration precedence is:
 
-1. Databricks/Spark configuration (``nyc_mobility.*``)
-2. Environment variables (``NYC_MOBILITY_*``)
-3. Version-controlled, non-secret defaults
+1. Explicit Databricks task parameters
+2. Databricks/Spark configuration (``nyc_mobility.*``)
+3. Environment variables (``NYC_MOBILITY_*``)
+4. Version-controlled, non-secret defaults
 
 Secrets do not belong in this object. Use Databricks secret scopes for them.
 """
@@ -13,8 +14,9 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Protocol
 from urllib.parse import urlsplit
 
@@ -27,6 +29,14 @@ class SparkConfLike(Protocol):
 
 class SparkSessionLike(Protocol):
     conf: SparkConfLike
+
+
+class WidgetsLike(Protocol):
+    def get(self, name: str) -> str: ...
+
+
+class DBUtilsLike(Protocol):
+    widgets: WidgetsLike
 
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -136,6 +146,22 @@ class PipelineConfig:
 
         return tuple(ranges)
 
+    def analysis_months(self) -> tuple[str, ...]:
+        """Return every configured source month as ``YYYY-MM``."""
+        return tuple(start[:7] for start, _ in self.monthly_date_ranges())
+
+    @property
+    def analysis_month_count(self) -> int:
+        """Return the number of configured calendar months."""
+        return len(self.analysis_months())
+
+    @property
+    def expected_weather_hours(self) -> int:
+        """Return the expected hourly positions for the inclusive date window."""
+        start = date.fromisoformat(self.analysis_start_date)
+        end = date.fromisoformat(self.analysis_end_date)
+        return ((end - start) + timedelta(days=1)).days * 24
+
 
 _SETTINGS = {
     "catalog": ("nyc_mobility.catalog", "NYC_MOBILITY_CATALOG"),
@@ -195,6 +221,7 @@ def _spark_value(spark: SparkSessionLike | None, key: str) -> str | None:
 def load_config(
     spark: SparkSessionLike | None = None,
     environ: dict[str, str] | None = None,
+    overrides: Mapping[str, str | None] | None = None,
 ) -> PipelineConfig:
     """Resolve and validate project configuration.
 
@@ -202,16 +229,25 @@ def load_config(
     mutating process-wide environment variables.
     """
     environment = os.environ if environ is None else environ
+    explicit = {} if overrides is None else dict(overrides)
+    unknown = explicit.keys() - _SETTINGS.keys()
+    if unknown:
+        raise ValueError(f"Unknown configuration override(s): {sorted(unknown)}")
     defaults = PipelineConfig()
     resolved: dict[str, str | None] = {}
 
     for field_name, (spark_key, env_key) in _SETTINGS.items():
+        explicit_value = explicit.get(field_name)
+        if isinstance(explicit_value, str):
+            explicit_value = explicit_value.strip() or None
         spark_value = _spark_value(spark, spark_key)
         env_value = environment.get(env_key)
         if isinstance(env_value, str):
             env_value = env_value.strip() or None
         resolved[field_name] = (
-            spark_value
+            explicit_value
+            if explicit_value is not None
+            else spark_value
             if spark_value is not None
             else env_value
             if env_value is not None
@@ -219,6 +255,23 @@ def load_config(
         )
 
     return PipelineConfig(**resolved)
+
+
+def load_notebook_config(
+    dbutils: DBUtilsLike,
+    spark: SparkSessionLike | None = None,
+    environ: dict[str, str] | None = None,
+) -> PipelineConfig:
+    """Load Databricks task parameters through the central config contract."""
+    overrides: dict[str, str] = {}
+    for field_name in _SETTINGS:
+        try:
+            value = dbutils.widgets.get(field_name)
+        except Exception:
+            continue
+        if isinstance(value, str) and value.strip():
+            overrides[field_name] = value.strip()
+    return load_config(spark=spark, environ=environ, overrides=overrides)
 
 
 CONFIG = load_config()

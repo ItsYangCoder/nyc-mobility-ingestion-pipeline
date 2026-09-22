@@ -23,23 +23,21 @@ if repo_root is None:
 
 sys.path.insert(0, str(repo_root / "src"))
 
-from nyc_mobility.config import load_config
+from nyc_mobility.config import load_notebook_config
 from nyc_mobility.logging import configure_logging, get_logger, log_event
+from nyc_mobility.sql import render_sql_file
 
 configure_logging()
 LOGGER = get_logger("notebooks.setup")
-CONFIG = load_config(spark)
+CONFIG = load_notebook_config(dbutils, spark)
 
 # COMMAND ----------
 
-spark.sql(f"CREATE CATALOG IF NOT EXISTS `{CONFIG.catalog}`")
-for schema_name in (
-    CONFIG.bronze_schema,
-    CONFIG.silver_schema,
-    CONFIG.gold_schema,
-    CONFIG.quality_schema,
-):
-    spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{CONFIG.catalog}`.`{schema_name}`")
+setup_path = repo_root / "src" / "sql" / "00_setup" / "00_setup.sql"
+setup_sql = render_sql_file(setup_path, CONFIG)
+for statement in setup_sql.split(";"):
+    if statement.strip():
+        spark.sql(statement)
 
 log_event(
     LOGGER,

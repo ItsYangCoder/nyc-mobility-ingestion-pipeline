@@ -23,7 +23,7 @@ if repo_root is None:
 
 sys.path.insert(0, str(repo_root / "src"))
 
-from nyc_mobility.config import load_config
+from nyc_mobility.config import load_notebook_config
 from nyc_mobility.ingestion.download_taxi_zones import download_or_reuse
 from nyc_mobility.ingestion.green_taxi import ingest_green_taxi
 from nyc_mobility.ingestion.weather import download_weather
@@ -31,7 +31,7 @@ from nyc_mobility.logging import configure_logging, get_logger, log_event
 
 configure_logging()
 LOGGER = get_logger("notebooks.land_raw_sources")
-CONFIG = load_config(spark)
+CONFIG = load_notebook_config(dbutils, spark)
 LANDING = Path(CONFIG.landing_path)
 
 # COMMAND ----------
@@ -40,6 +40,7 @@ green_status = ingest_green_taxi(
     "all",
     output_dir=LANDING / "green_taxi",
     inventory_path=LANDING / "green_taxi" / "_metadata" / "green_taxi_inventory.csv",
+    config=CONFIG,
 )
 if green_status:
     raise RuntimeError("One or more Green Taxi downloads failed.")
@@ -51,17 +52,18 @@ for start_date, end_date in CONFIG.monthly_date_ranges():
         start_date,
         end_date,
         output_dir=LANDING / "weather",
+        config=CONFIG,
     )
 
 # COMMAND ----------
 
-download_or_reuse(output_dir=LANDING / "taxi_zones")
+download_or_reuse(output_dir=LANDING / "taxi_zones", config=CONFIG)
 
 # COMMAND ----------
 
 expected = {
-    "green_taxi": 3,
-    "weather": 6,
+    "green_taxi": CONFIG.analysis_month_count,
+    "weather": CONFIG.analysis_month_count * 2,
     "taxi_zones": 2,
 }
 for folder, minimum_count in expected.items():

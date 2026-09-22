@@ -6,7 +6,7 @@ from pathlib import Path
 
 import requests
 
-from nyc_mobility.config import CONFIG
+from nyc_mobility.config import CONFIG, PipelineConfig
 from nyc_mobility.logging import configure_logging, get_logger, log_event
 
 LATITUDE = 40.7128
@@ -98,6 +98,7 @@ def download_weather(
     start_date: str,
     end_date: str,
     output_dir: Path = DEFAULT_OUTPUT_DIR,
+    config: PipelineConfig = CONFIG,
 ) -> None:
     """Download and validate one date range without overwriting valid raw data."""
     if start_date > end_date:
@@ -118,7 +119,7 @@ def download_weather(
         "start_date": start_date,
         "end_date": end_date,
         "hourly": ",".join(HOURLY_VARIABLES),
-        "timezone": TIMEZONE,
+        "timezone": config.timezone,
     }
 
     log_event(
@@ -126,13 +127,13 @@ def download_weather(
         logging.INFO,
         "weather.download_started",
         "Requesting weather data",
-        source_url=URL,
+        source_url=config.weather_source_url,
         output_file=filename,
         request_parameters=params,
     )
 
     try:
-        response = requests.get(URL, params=params, timeout=30)
+        response = requests.get(config.weather_source_url, params=params, timeout=30)
         log_event(
             LOGGER,
             logging.INFO,
@@ -150,7 +151,7 @@ def download_weather(
             logging.ERROR,
             "weather.request_failed",
             "Weather API request failed",
-            source_url=URL,
+            source_url=config.weather_source_url,
             start_date=start_date,
             end_date=end_date,
             error=str(error),
@@ -181,7 +182,7 @@ def download_weather(
             "latitude": LATITUDE,
             "longitude": LONGITUDE,
         },
-        "timezone": TIMEZONE,
+        "timezone": config.timezone,
         "units": data.get("hourly_units", {}),
     }
 
