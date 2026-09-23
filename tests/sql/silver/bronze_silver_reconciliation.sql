@@ -5,7 +5,7 @@
 
 WITH weather_exploded AS (
     SELECT
-        CAST(weather.time AS TIMESTAMP) AS weather_hour_local,
+        CAST(weather.time AS TIMESTAMP_NTZ) AS weather_hour_local,
         _source_file,
         _source_file_modified_at,
         _ingested_at,

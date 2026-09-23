@@ -27,9 +27,36 @@ def _taxi_summary(frame):
     return row.rows, row.fare, row.total, row.distance
 
 
+def _taxi_grain(frame, *, is_bronze: bool):
+    """Normalize the retained taxi grain on either side of Silver."""
+    if is_bronze:
+        return frame.select(
+            F.col("VendorID").cast("long").alias("vendor_id"),
+            F.col("lpep_pickup_datetime")
+            .cast("timestamp_ntz")
+            .alias("pickup_ts_local"),
+            F.col("lpep_dropoff_datetime")
+            .cast("timestamp_ntz")
+            .alias("dropoff_ts_local"),
+            F.col("PULocationID").cast("long").alias("pu_location_id"),
+            F.col("DOLocationID").cast("long").alias("do_location_id"),
+        )
+    return frame.select(
+        "vendor_id",
+        "pickup_ts_local",
+        "dropoff_ts_local",
+        "pu_location_id",
+        "do_location_id",
+    )
+
+
 def _assert_taxi_reconciles(bronze, silver) -> None:
     """Fail on missing, duplicated, or measure-changed retained taxi rows."""
     assert _taxi_summary(bronze) == _taxi_summary(silver)
+    bronze_grain = _taxi_grain(bronze, is_bronze=True)
+    silver_grain = _taxi_grain(silver, is_bronze=False)
+    assert bronze_grain.exceptAll(silver_grain).limit(1).count() == 0
+    assert silver_grain.exceptAll(bronze_grain).limit(1).count() == 0
 
 
 def test_bronze_to_silver_taxi_preserves_rows_and_measures(spark):
@@ -64,6 +91,18 @@ def test_taxi_reconciliation_detects_missing_duplicate_and_changed_measures(spar
             silver.withColumn("fare_amount", F.col("fare_amount") + F.lit(1.0)),
         )
 
+    equal_measures = [_taxi_row(3, 0), _taxi_row(3, 1)]
+    for measure in ("trip_distance", "fare_amount", "total_amount"):
+        equal_measures[1][measure] = equal_measures[0][measure]
+    bronze_with_equal_measures = spark.createDataFrame(equal_measures)
+    silver_with_equal_measures = build_silver_green_taxi(bronze_with_equal_measures)
+    first_key = silver_with_equal_measures.first().trip_key
+    offsetting_bad_silver = silver_with_equal_measures.filter(
+        F.col("trip_key") != first_key
+    ).unionByName(silver_with_equal_measures.filter(F.col("trip_key") != first_key))
+    with pytest.raises(AssertionError):
+        _assert_taxi_reconciles(bronze_with_equal_measures, offsetting_bad_silver)
+
 
 def test_weather_reconciliation_uses_latest_hourly_snapshot_not_response_count(spark):
     """Overlapping API snapshots collapse to one latest row for each local hour."""
@@ -79,6 +118,12 @@ def test_weather_reconciliation_uses_latest_hourly_snapshot_not_response_count(s
     assert bronze.count() == 2
     assert silver.count() == 2
     assert silver.select("weather_hour_local").distinct().count() == 2
+    assert {
+        row.weather_hour_local for row in silver.select("weather_hour_local").collect()
+    } == {
+        datetime(2026, 3, 5, 8),
+        datetime(2026, 3, 5, 9),
+    }
     assert {row.temperature_2m_c for row in silver.collect()} == {99.0, 100.0}
     assert {row.source_file for row in silver.select("source_file").collect()} == {
         "/landing/weather_2026-03-retry.json"

@@ -4,7 +4,8 @@
 
 WITH taxi_classified AS (
     SELECT CASE
-        WHEN NOT is_in_analysis_window THEN 'outside_analysis_window'
+        WHEN NOT COALESCE(is_in_analysis_window, false)
+            THEN 'outside_analysis_window'
         WHEN pickup_ts_local IS NULL OR dropoff_ts_local IS NULL
             THEN 'missing_trip_timestamp'
         WHEN pu_location_id IS NULL THEN 'missing_pickup_location'
