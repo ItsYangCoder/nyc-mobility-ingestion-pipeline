@@ -10,11 +10,7 @@ def spark():
     """Provide a deterministic, single-process Spark session."""
     from databricks.connect import DatabricksSession
 
-    session = (
-        DatabricksSession.builder.appName("nyc-mobility-tests")
-        .config("spark.ui.enabled", "false")
-        .config("spark.sql.shuffle.partitions", "1")
-        .config("spark.sql.session.timeZone", "UTC")
-        .getOrCreate()
-    )
+    session = DatabricksSession.builder.getOrCreate()
+    session.conf.set("spark.sql.shuffle.partitions", "1")
+    session.conf.set("spark.sql.session.timeZone", "UTC")
     yield session
