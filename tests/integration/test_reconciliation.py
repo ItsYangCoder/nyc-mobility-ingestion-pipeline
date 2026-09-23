@@ -80,6 +80,6 @@ def test_weather_reconciliation_uses_latest_hourly_snapshot_not_response_count(s
     assert silver.count() == 2
     assert silver.select("weather_hour_local").distinct().count() == 2
     assert {row.temperature_2m_c for row in silver.collect()} == {99.0, 100.0}
-    assert {
-        row.source_file for row in silver.select("source_file").collect()
-    } == {"/landing/weather_2026-03-retry.json"}
+    assert {row.source_file for row in silver.select("source_file").collect()} == {
+        "/landing/weather_2026-03-retry.json"
+    }
