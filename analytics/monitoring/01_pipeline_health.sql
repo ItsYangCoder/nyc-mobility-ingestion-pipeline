@@ -1,5 +1,5 @@
 -- Authoritative job execution history from Databricks system tables.
--- Bind :workspace_id and :job_id in the SQL editor/dashboard.
+-- Bind :workspace_id, :job_id, and :workspace_url in the SQL editor/dashboard.
 -- Timeline rows can be hourly slices; collapse them to one row per job run.
 WITH runs AS (
   SELECT
@@ -30,6 +30,17 @@ SELECT
     THEN TIMESTAMPDIFF(SECOND, started_at, latest_period_end_at)
   END AS duration_seconds,
   COALESCE(result_state, 'UNKNOWN_OR_IN_PROGRESS') AS result_state,
-  termination_code
+  termination_code,
+  MAX(CASE WHEN result_state = 'SUCCEEDED' THEN latest_period_end_at END)
+    OVER () AS last_successful_run_at,
+  COUNT_IF(result_state IN ('FAILED', 'ERROR', 'TIMED_OUT'))
+    OVER () AS failed_run_count_30d,
+  COUNT_IF(result_state IS NOT NULL)
+    OVER () AS completed_run_count_30d,
+  COUNT_IF(result_state IN ('FAILED', 'ERROR', 'TIMED_OUT')) OVER ()
+    / NULLIF(COUNT_IF(result_state IS NOT NULL) OVER (), 0)
+    AS failure_rate_30d,
+  CONCAT(RTRIM(:workspace_url, '/'), '/jobs/', job_id, '/runs/', run_id)
+    AS run_url
 FROM runs
 ORDER BY started_at DESC;

@@ -1,5 +1,5 @@
 -- Task-level outcomes; run_id is the task run, job_run_id is its parent run.
--- Bind :workspace_id and :job_id; preserve each task run across retries.
+-- Bind :workspace_id, :job_id, and :workspace_url.
 WITH task_runs AS (
   SELECT
     workspace_id,
@@ -29,7 +29,12 @@ SELECT
   task_key,
   started_at,
   CASE WHEN result_state IS NOT NULL THEN latest_period_end_at END AS ended_at,
+  CASE WHEN result_state IS NOT NULL
+    THEN TIMESTAMPDIFF(SECOND, started_at, latest_period_end_at)
+  END AS duration_seconds,
   COALESCE(result_state, 'UNKNOWN_OR_IN_PROGRESS') AS result_state,
-  termination_code
+  termination_code,
+  CONCAT(RTRIM(:workspace_url, '/'), '/jobs/', job_id, '/runs/', job_run_id)
+    AS parent_run_url
 FROM task_runs
 ORDER BY started_at DESC;
