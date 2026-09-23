@@ -1,9 +1,13 @@
 -- Eligible Silver-to-Gold taxi measure reconciliation. Result must return PASS.
+-- Gold stores fare and total as DECIMAL(12,2), so expected Silver measures use
+-- the same rounding before aggregate comparison. Null measures remain NULL.
 
 WITH eligible_silver AS (
     SELECT COUNT(*) AS row_count,
-           SUM(CAST(fare_amount AS DECIMAL(20, 4))) AS fare_amount,
-           SUM(CAST(total_amount AS DECIMAL(20, 4))) AS total_amount,
+           SUM(CAST(CAST(fare_amount AS DECIMAL(12, 2)) AS DECIMAL(20, 4)))
+               AS fare_amount,
+           SUM(CAST(CAST(total_amount AS DECIMAL(12, 2)) AS DECIMAL(20, 4)))
+               AS total_amount,
            SUM(CAST(trip_distance AS DECIMAL(20, 4))) AS trip_distance
     FROM nyc_mobility.nyc_silver.silver_green_taxi_trips
     WHERE is_in_analysis_window

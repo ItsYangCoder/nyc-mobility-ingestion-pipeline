@@ -1,4 +1,7 @@
 -- Bronze-to-Silver taxi measure reconciliation. Result must return PASS.
+-- Both sides retain every source trip. Casting to DECIMAL(20, 4) makes decimal
+-- comparison and null treatment explicit: SUM is NULL only when all values in
+-- the compared population are NULL.
 
 WITH bronze AS (
     SELECT COUNT(*) AS row_count,
