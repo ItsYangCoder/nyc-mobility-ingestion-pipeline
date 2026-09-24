@@ -1,4 +1,8 @@
--- Bronze-to-Silver taxi measure reconciliation. Result must return PASS.
+-- Shared result contract: source, expected_rows, actual_rows, row_difference,
+-- fare_difference, total_difference, distance_difference, status.
+-- Both sides retain every source trip. Casting to DECIMAL(20, 4) makes decimal
+-- comparison and null treatment explicit: SUM is NULL only when all values in
+-- the compared population are NULL.
 
 WITH bronze AS (
     SELECT COUNT(*) AS row_count,
@@ -14,7 +18,10 @@ silver AS (
            SUM(CAST(trip_distance AS DECIMAL(20, 4))) AS trip_distance
     FROM nyc_mobility.nyc_silver.silver_green_taxi_trips
 )
-SELECT b.row_count AS bronze_rows, s.row_count AS silver_rows,
+SELECT 'green_taxi' AS source,
+       b.row_count AS expected_rows,
+       s.row_count AS actual_rows,
+       s.row_count - b.row_count AS row_difference,
        s.fare_amount - b.fare_amount AS fare_difference,
        s.total_amount - b.total_amount AS total_difference,
        s.trip_distance - b.trip_distance AS distance_difference,
