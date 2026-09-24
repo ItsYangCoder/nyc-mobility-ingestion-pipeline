@@ -22,6 +22,7 @@ The dashboard must answer four questions:
 | Task failures | `system.lakeflow.job_task_run_timeline` | `analytics/monitoring/02_task_run_history.sql` | typically delayed; verify in the target region |
 | Immediate run context | Databricks Jobs API or supplied task parameters | `nyc_mobility.monitoring.run_audit` and `notebooks/03_record_run_metrics.py` | immediate when invoked with authoritative inputs |
 | Quality and coverage | `<catalog>.<quality_schema>.quality_results` from #6 | `analytics/monitoring/03_quality_results.sql` | available after the DQ task persists its results |
+| Dataset freshness | Silver and Gold event and processing timestamps | `analytics/monitoring/04_dataset_freshness.sql` | available after the medallion refresh |
 
 The project does not copy Databricks job and task history into another audit
 table. System tables remain authoritative for historical execution. The
@@ -31,10 +32,12 @@ task value only. This avoids duplicated records and conflicting run statuses.
 ## Execution metrics
 
 The execution panel shows `job_id`, `run_id`, start and end timestamps,
-duration, result state, termination code, last successful run, and the original
-run URL. A missing system-table result is displayed as
-`UNKNOWN_OR_IN_PROGRESS`, not as success. Because system tables are delayed,
-the Jobs UI or API is required to confirm whether such a run is live.
+duration, result state, termination code, last successful run, last observation,
+and the original run URL. A nonterminal row observed within the last two hours
+is displayed as `RUNNING`; an older nonterminal row is `UNKNOWN`. This threshold
+is a dashboard presentation rule, not proof that the job is still active.
+Because system tables are delayed, the Jobs UI or API remains authoritative for
+immediate confirmation.
 
 The 30-day failure rate is:
 
@@ -67,17 +70,23 @@ historical workload, expected coverage ends at the configured
 - `UNKNOWN` when the check did not run or the actual value is unavailable.
 
 A paused production schedule is not a missed-run incident. The dashboard must
-show the schedule state separately from dataset coverage. The quality coverage
-panel reads the latest date-coverage, freshness, and expected-count rules from
-the #6 result table.
+show the schedule state separately from dataset coverage. The freshness query
+reports `actual_through` from source event dates and `last_processed_at` from
+pipeline timestamps as separate fields. Taxi, weather, and their Gold facts are
+compared with the configured historical analysis end date. Taxi Zones is a
+static reference dataset and is fresh when a nonempty snapshot is available;
+its cadence is an approved source revision rather than a daily schedule.
 
 ## Quality status
 
 The quality panel shows run and attempt IDs, dataset and layer, rule, severity,
 outcome, timestamp, actual and expected values, failed-record count, sanitized
 error, and response action. Outcome precedence for a summary is `ERROR`,
-`FAIL`, `WARN`, then `PASS`. An empty result set is `NOT_EVALUATED`; it must
-never be reported as `PASS`.
+`FAIL`, `WARN`, then `PASS`. The dashboard parameter `expected_rule_ids` must
+contain the comma-separated rules selected for the DQ task. The query left
+joins that catalogue to persisted results, so an expected rule without a result
+is displayed as `NOT_EVALUATED`, never `PASS`. Observed rules not present in the
+parameter are retained so configuration drift remains visible.
 
 ## Lineage and impact
 
@@ -105,13 +114,22 @@ Create a Lakeview dashboard with these datasets:
 
 - Execution from `01_pipeline_health.sql`, filtered by workspace, job, and time;
 - Failures from `02_task_run_history.sql`, filtered to failed or timed-out tasks;
-- Freshness from the second query in `03_quality_results.sql`;
-- Quality from the first query in `03_quality_results.sql`.
+- Quality from `03_quality_results.sql`, filtered by run and attempt;
+- Freshness from `04_dataset_freshness.sql`, using configured table names,
+  analysis end date, and tolerance.
+
+The bundle syncs `analytics/**`, so these checked-in queries are available in
+the deployed workspace for dashboard construction.
 
 Recommended visualizations are a latest-run status tile, last-success tile,
 30-day failure-rate tile, task history table, freshness table, and DQ results
 table. Record the saved dashboard URL only after access and execution are
 verified. Do not commit workspace credentials or recipient addresses.
+
+Required dashboard parameters are `workspace_id`, `job_id`, `workspace_url`,
+`quality_results_table`, `run_id`, `attempt_id`, `expected_rule_ids`, the five
+Silver/Gold table identifiers used by the freshness query,
+`analysis_end_date`, and `tolerance_days`.
 
 ## Permissions and latency
 
@@ -131,7 +149,7 @@ approves it. Issue #5 owns notification wiring; the monitoring owner maintains
 the dashboard and triage definitions. Recovery actions are documented in
 `docs/runbooks/recovery.md`.
 
-## Verification still required
+## Workspace verification still required
 
 - confirm `system.lakeflow` access and query compatibility in development;
 - save the dashboard and record its URL;

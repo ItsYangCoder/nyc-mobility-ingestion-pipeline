@@ -1,6 +1,17 @@
 # Monitoring dashboard evidence
 
-## TODO(mafelisilda): evidence to capture after implementation
+## Repository implementation available
+
+- System-table queries cover parent runs and task runs, including live,
+  terminal, and unknown status presentation.
+- The quality query emits `NOT_EVALUATED` for expected rules without persisted
+  results.
+- The freshness query separates source event coverage from processing time for
+  Silver and Gold datasets.
+- Unit tests protect run normalization, missing metrics, retry handling,
+  historical freshness, and the dashboard SQL contracts.
+
+## Development workspace evidence still required
 
 - Databricks workflow run link or screenshot showing task status and duration.
 - Latest successful run timestamp and process date.

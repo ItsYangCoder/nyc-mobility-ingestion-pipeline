@@ -1,5 +1,5 @@
--- Task-level outcomes; run_id is the task run, job_run_id is its parent run.
--- Bind :workspace_id, :job_id, and :workspace_url.
+-- task-level outcomes; run_id is the task run, job_run_id is its parent run.
+-- bind :workspace_id, :job_id, and :workspace_url.
 WITH task_runs AS (
   SELECT
     workspace_id,
@@ -32,7 +32,13 @@ SELECT
   CASE WHEN result_state IS NOT NULL
     THEN TIMESTAMPDIFF(SECOND, started_at, latest_period_end_at)
   END AS duration_seconds,
-  COALESCE(result_state, 'UNKNOWN_OR_IN_PROGRESS') AS result_state,
+  CASE
+    WHEN result_state IS NOT NULL THEN result_state
+    WHEN latest_period_end_at >= CURRENT_TIMESTAMP() - INTERVAL 2 HOURS
+      THEN 'RUNNING'
+    ELSE 'UNKNOWN'
+  END AS result_state,
+  latest_period_end_at AS last_observed_at,
   termination_code,
   CONCAT(RTRIM(:workspace_url, '/'), '/jobs/', job_id, '/runs/', job_run_id)
     AS parent_run_url

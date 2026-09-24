@@ -1,58 +1,49 @@
--- Latest runtime data-quality results from Issue #6.
--- Bind :quality_results_table to catalog.schema.quality_results.
-WITH ranked AS (
+-- quality results for one selected run and attempt.
+-- bind :quality_results_table, :run_id, :attempt_id, and :expected_rule_ids.
+-- expected_rule_ids is a comma-separated list supplied by the selected DQ task.
+WITH selected_attempt AS (
+  SELECT CAST(:run_id AS STRING) AS run_id,
+         CAST(:attempt_id AS STRING) AS attempt_id
+),
+expected_rules AS (
+  SELECT TRIM(rule_id) AS rule_id
+  FROM (SELECT EXPLODE(SPLIT(:expected_rule_ids, ',')) AS rule_id)
+  WHERE TRIM(rule_id) != ''
+),
+ranked_results AS (
   SELECT
-    *,
+    q.*,
     ROW_NUMBER() OVER (
-      PARTITION BY run_id, attempt_id, rule_id
-      ORDER BY checked_at DESC
+      PARTITION BY q.run_id, q.attempt_id, q.rule_id
+      ORDER BY q.checked_at DESC
     ) AS result_rank
-  FROM IDENTIFIER(:quality_results_table)
-  WHERE checked_at >= CURRENT_TIMESTAMP() - INTERVAL 30 DAYS
+  FROM IDENTIFIER(:quality_results_table) q
+  CROSS JOIN selected_attempt s
+  WHERE q.run_id = s.run_id AND q.attempt_id = s.attempt_id
+),
+observed_results AS (
+  SELECT * FROM ranked_results WHERE result_rank = 1
+),
+rule_catalog AS (
+  SELECT rule_id FROM expected_rules
+  UNION
+  SELECT rule_id FROM observed_results
 )
 SELECT
-  run_id,
-  attempt_id,
-  checked_at,
-  layer,
-  dataset,
-  rule_id,
-  severity,
-  outcome,
-  actual_value,
-  expected_value,
-  failed_record_count,
-  error_message,
-  action
-FROM ranked
-WHERE result_rank = 1
-ORDER BY checked_at DESC, layer, dataset, rule_id;
-
--- Freshness and configured coverage panel.
-WITH ranked AS (
-  SELECT
-    *,
-    ROW_NUMBER() OVER (
-      PARTITION BY dataset, rule_id
-      ORDER BY checked_at DESC, attempt_id DESC
-    ) AS result_rank
-  FROM IDENTIFIER(:quality_results_table)
-  WHERE rule_id LIKE '%date_coverage%'
-    OR rule_id LIKE '%freshness%'
-    OR rule_id LIKE '%expected_source_counts%'
-)
-SELECT
-  dataset,
-  rule_id,
-  checked_at AS last_evaluated_at,
-  actual_value,
-  expected_value,
-  failed_record_count,
-  CASE
-    WHEN outcome IS NULL THEN 'NOT_EVALUATED'
-    ELSE outcome
-  END AS freshness_status,
-  error_message
-FROM ranked
-WHERE result_rank = 1
-ORDER BY dataset, rule_id;
+  s.run_id,
+  s.attempt_id,
+  q.checked_at,
+  q.layer,
+  q.dataset,
+  r.rule_id,
+  q.severity,
+  COALESCE(q.outcome, 'NOT_EVALUATED') AS outcome,
+  q.actual_value,
+  q.expected_value,
+  q.failed_record_count,
+  q.error_message,
+  q.action
+FROM selected_attempt s
+CROSS JOIN rule_catalog r
+LEFT JOIN observed_results q ON r.rule_id = q.rule_id
+ORDER BY q.checked_at DESC, q.layer, q.dataset, r.rule_id;

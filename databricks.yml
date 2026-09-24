@@ -4,6 +4,7 @@ bundle:
 
 sync:
   include:
+    - analytics/**
     - notebooks/**
     - src/**
     - tests/sql/**
