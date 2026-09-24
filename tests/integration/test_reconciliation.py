@@ -11,6 +11,7 @@ from pyspark.sql import functions as F
 from nyc_mobility.transformations.core import (
     build_fact_taxi_trip,
     build_silver_green_taxi,
+    build_silver_taxi_zones,
     build_silver_weather,
 )
 from tests.integration.conftest import _taxi_row, _weather_row, _weather_schema
@@ -128,3 +129,53 @@ def test_weather_reconciliation_uses_latest_hourly_snapshot_not_response_count(s
     assert {row.source_file for row in silver.select("source_file").collect()} == {
         "/landing/weather_2026-03-retry.json"
     }
+
+
+def test_taxi_zones_reconciliation_keeps_latest_canonical_location_grain(spark):
+    """Only the latest snapshot contributes one canonical row per location."""
+    rows = [
+        (
+            1,
+            "Manhattan",
+            "Old Zone",
+            "Boro",
+            "/landing/zones-old.csv",
+            datetime(2026, 3, 1),
+        ),
+        (
+            1,
+            "Manhattan",
+            "New Zone",
+            "Boro",
+            "/landing/zones-new.csv",
+            datetime(2026, 3, 2),
+        ),
+        (
+            1,
+            "Manhattan",
+            "New Zone",
+            "Boro",
+            "/landing/zones-new.csv",
+            datetime(2026, 3, 2),
+        ),
+        (
+            2,
+            "Queens",
+            "Astoria",
+            "Boro",
+            "/landing/zones-new.csv",
+            datetime(2026, 3, 2),
+        ),
+    ]
+    bronze = spark.createDataFrame(
+        rows,
+        "LocationID int, Borough string, Zone string, service_zone string, "
+        "_source_file string, _ingested_at timestamp",
+    ).withColumn("_source_file_modified_at", F.col("_ingested_at"))
+
+    silver = build_silver_taxi_zones(bronze)
+
+    assert silver.count() == 2
+    assert silver.select("location_id").distinct().count() == 2
+    assert silver.filter(F.col("location_id") == 1).first().zone == "New Zone"
+    assert silver.filter(F.col("location_id") == 1).first().source_row_count == 2

@@ -1,4 +1,5 @@
--- Eligible Silver-to-Gold row reconciliation. Every row must return PASS.
+-- Shared result contract: source, expected_rows, actual_rows, row_difference,
+-- fare_difference, total_difference, distance_difference, status.
 -- Taxi exclusion reasons are ordered and mutually exclusive, preventing a row
 -- with several missing fields from being counted more than once.
 
@@ -16,7 +17,7 @@ WITH taxi_classified AS (
 ),
 counts AS (
     SELECT
-        'taxi' AS fact,
+        'green_taxi' AS source,
         COUNT_IF(eligibility_reason = 'eligible') AS eligible_silver_rows,
         COUNT_IF(eligibility_reason != 'eligible') AS expected_excluded_rows,
         COUNT_IF(eligibility_reason = 'outside_analysis_window')
@@ -42,15 +43,13 @@ counts AS (
     FROM nyc_mobility.nyc_silver.silver_weather_hourly
 )
 SELECT
-       fact,
-       eligible_silver_rows,
-       expected_excluded_rows,
-       outside_analysis_window_rows,
-       missing_trip_timestamp_rows,
-       missing_pickup_location_rows,
-       missing_dropoff_location_rows,
-       gold_rows,
+       source,
+       eligible_silver_rows AS expected_rows,
+       gold_rows AS actual_rows,
        gold_rows - eligible_silver_rows AS row_difference,
+       CAST(NULL AS DECIMAL(20, 4)) AS fare_difference,
+       CAST(NULL AS DECIMAL(20, 4)) AS total_difference,
+       CAST(NULL AS DECIMAL(20, 4)) AS distance_difference,
        CASE WHEN eligible_silver_rows = gold_rows THEN 'PASS' ELSE 'FAIL' END AS status
 FROM counts
-ORDER BY fact;
+ORDER BY source;

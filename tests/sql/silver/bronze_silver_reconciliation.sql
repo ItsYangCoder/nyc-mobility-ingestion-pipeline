@@ -1,4 +1,5 @@
--- Source-aware Bronze-to-Silver reconciliation. Every row must return PASS.
+-- Shared result contract: source, expected_rows, actual_rows, row_difference,
+-- fare_difference, total_difference, distance_difference, status.
 -- Weather is compared at its actual Silver grain: exploded hourly positions,
 -- followed by the latest-row-per-hour selection. Taxi Zones compares the latest
 -- snapshot after its one-row-per-canonical-key reduction.
@@ -70,6 +71,9 @@ SELECT
     e.expected_rows,
     a.actual_rows,
     a.actual_rows - e.expected_rows AS row_difference,
+    CAST(NULL AS DECIMAL(20, 4)) AS fare_difference,
+    CAST(NULL AS DECIMAL(20, 4)) AS total_difference,
+    CAST(NULL AS DECIMAL(20, 4)) AS distance_difference,
     CASE WHEN a.actual_rows = e.expected_rows THEN 'PASS' ELSE 'FAIL' END AS status
 FROM expected e
 JOIN actual a USING (source)

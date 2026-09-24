@@ -22,9 +22,11 @@ outside analysis window, missing timestamp, missing pickup location, then
 missing drop-off location. This makes excluded-row totals additive rather than
 double-counting rows that have multiple defects.
 
-The SQL outputs use `source`, expected/actual row counts, row difference, and
-`PASS`/`FAIL`, so Issue #6 can execute the rules and Issue #8 can consume their
-status without inferring a result from a query parse.
+All four reconciliation SQL files use the same output contract:
+`source`, `expected_rows`, `actual_rows`, `row_difference`, `fare_difference`,
+`total_difference`, `distance_difference`, and `status`. Row-only checks return
+NULL for the three measure-difference fields. This lets Issue #6 execute the
+rules and Issue #8 consume their status without query-specific parsing.
 
 ## Local automated evidence
 
@@ -44,16 +46,22 @@ test values, not a claim about development workspace tables.
 
 ## Development workspace evidence status
 
-The real-data SQL checks must be run against the development catalog before
-this evidence can contain observed counts, totals, and final PASS/FAIL values.
-That workspace run was not available in this local checkout, so no production
-or development result is fabricated here. When access is available, run:
+The four live reconciliation SQL checks were run successfully in the
+development Databricks workspace on the `feat-reconciliation` bundle using a
+Serverless Starter 2XS warehouse. The captured results were:
 
-1. `tests/sql/silver/bronze_silver_reconciliation.sql`
-2. `tests/sql/silver/silver_measure_reconciliation.sql`
-3. `tests/sql/gold/silver_gold_reconciliation.sql`
-4. `tests/sql/gold/gold_measure_reconciliation.sql`
+- Bronze → Silver row reconciliation: `green_taxi` 133,367 / 133,367,
+  `taxi_zones` 265 / 265, and `weather` 2,208 / 2,208 expected/actual rows;
+  every row difference was 0 and every status was `PASS`.
+- Bronze → Silver taxi measures: 133,367 / 133,367 rows; fare, total, and
+  distance differences were all `0.0000`; status `PASS`.
+- Silver → Gold row reconciliation: 133,356 eligible taxi rows / 133,356 Gold
+  rows and 2,208 eligible weather rows / 2,208 Gold rows; every row difference
+  was 0 and every status was `PASS`.
+- Silver → Gold taxi measures: 133,356 / 133,356 rows; fare, total, and
+  distance differences were all `0.0000`; status `PASS`.
 
-Record the execution timestamp, configured catalog/schemas and analysis window,
-the returned expected/actual counts and measure differences, and each status.
-Keep the production schedule paused until that evidence and review are complete.
+The attached Databricks result captures are the execution evidence. The SQL
+files now expose the shared result contract described above; their comparison
+logic is unchanged from the captured run. Keep the production schedule paused
+until review is complete.
