@@ -6,14 +6,20 @@ from nyc_mobility.config import load_config
 from nyc_mobility.transformations.core import build_fact_taxi_trip
 
 CONFIG = load_config(spark)
+
 SILVER_TABLE = CONFIG.table("silver", "silver_green_taxi_trips")
+
 GOLD_TABLE = CONFIG.table("gold", "fact_taxi_trip")
 
 
 @dp.materialized_view(
     name=GOLD_TABLE,
     comment="Green Taxi fact at one row per in-window retained trip.",
-    table_properties={"quality": "gold", "grain": "one row per taxi trip"},
+    table_properties={
+        "quality": "gold",
+        "grain": "one row per taxi trip",
+        "delta.feature.timestampNtz": "supported",
+    },
 )
 @dp.expect_or_fail("trip_key_present", "trip_key IS NOT NULL")
 @dp.expect_or_fail(

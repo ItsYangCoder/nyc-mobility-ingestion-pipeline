@@ -12,7 +12,10 @@ LANDING_PATH = CONFIG.landing_path
 @dp.table(
     name="bronze_green_taxi_raw",
     comment="Raw NYC Green Taxi trips incrementally loaded from landed Parquet.",
-    table_properties={"quality": "bronze"},
+    table_properties={
+        "quality": "bronze",
+        "delta.feature.timestampNtz": "supported",
+    },
 )
 @dp.expect("source_file_present", "_source_file IS NOT NULL")
 def bronze_green_taxi_raw():

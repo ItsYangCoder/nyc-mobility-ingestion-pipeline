@@ -73,7 +73,8 @@ def check_file(path: Path) -> bool:
         return False
 
     try:
-        sample = path.read_bytes()[:1000].lower()
+        with path.open("rb") as file:
+            sample = file.read(1000).lower()
     except OSError as error:
         print(f"FAIL | Could not read {path}: {error}")
         return False
@@ -134,62 +135,63 @@ def check_green_taxi(
         return False, metrics
 
     try:
-        table = parquet.read_table(path)
+        parquet_file = parquet.ParquetFile(path)
     except Exception as error:
         print(f"FAIL | Could not read Parquet: {error}")
         return False, metrics
 
-    columns = set(table.column_names)
+    columns = set(parquet_file.schema_arrow.names)
     missing_columns = GREEN_TAXI_REQUIRED_COLUMNS - columns
 
     if missing_columns:
         print(f"FAIL | Missing columns: {sorted(missing_columns)}")
         return False, metrics
 
-    if table.num_rows == 0:
+    row_count = parquet_file.metadata.num_rows
+    if row_count == 0:
         print("FAIL | Parquet contains zero rows")
         return False, metrics
 
-    pickup_values = table["lpep_pickup_datetime"].to_pylist()
-    pickup_dates = [as_date(value) for value in pickup_values]
-
-    valid_dates = {value for value in pickup_dates if value is not None}
-
     expected_start, expected_end = month_bounds(expected_month)
+    boundary_dates = set()
+    seen_keys = set()
+    duplicate_keys = 0
+    missing_key_rows = 0
+    invalid_dates = 0
+    outside_month = 0
 
-    if expected_start not in valid_dates or expected_end not in valid_dates:
+    for batch in parquet_file.iter_batches(columns=GREEN_TAXI_CANDIDATE_KEY):
+        key_columns = [
+            batch.column(name).to_pylist() for name in GREEN_TAXI_CANDIDATE_KEY
+        ]
+        for key in zip(*key_columns, strict=True):
+            pickup_date = as_date(key[1])
+            if pickup_date is None:
+                invalid_dates += 1
+            elif pickup_date in (expected_start, expected_end):
+                boundary_dates.add(pickup_date)
+            elif not expected_start <= pickup_date <= expected_end:
+                outside_month += 1
+
+            if any(value is None for value in key):
+                missing_key_rows += 1
+
+            if key in seen_keys:
+                duplicate_keys += 1
+            else:
+                seen_keys.add(key)
+
+    if expected_start not in boundary_dates or expected_end not in boundary_dates:
         print(
             "FAIL | Pickup coverage does not include the full expected month: "
             f"{expected_start} to {expected_end}"
         )
         return False, metrics
 
-    invalid_dates = sum(value is None for value in pickup_dates)
-
-    outside_month = sum(
-        value is not None and not expected_start <= value <= expected_end
-        for value in pickup_dates
-    )
-
-    key_columns = [table[name].to_pylist() for name in GREEN_TAXI_CANDIDATE_KEY]
-
-    seen_keys = set()
-    duplicate_keys = 0
-    missing_key_rows = 0
-
-    for key in zip(*key_columns, strict=True):
-        if any(value is None for value in key):
-            missing_key_rows += 1
-
-        if key in seen_keys:
-            duplicate_keys += 1
-        else:
-            seen_keys.add(key)
-
     metrics["missing"] = missing_key_rows
     metrics["duplicates"] = duplicate_keys
 
-    print(f"PASS | Rows: {table.num_rows:,}")
+    print(f"PASS | Rows: {row_count:,}")
     print(f"INFO | Invalid pickup dates: {invalid_dates:,}")
     print(f"INFO | Rows outside expected month: {outside_month:,}")
     print(f"INFO | Missing candidate-key rows: {missing_key_rows:,}")

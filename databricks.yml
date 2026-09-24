@@ -17,9 +17,11 @@ sync:
 variables:
   service_principal_name:
     description: Application ID used as the production run identity.
+
   catalog:
     description: Unity Catalog catalog used by pipeline-managed tables.
     default: nyc_mobility
+
   landing_schema:
     default: nyc_group_c
   landing_volume:
@@ -32,15 +34,19 @@ variables:
     default: nyc_gold
   quality_schema:
     default: nyc_quality
+
   landing_path:
-    description: Existing external Unity Catalog Volume landing directory.
+    description: Shared R2-backed Unity Catalog Volume landing directory.
     default: /Volumes/nyc_mobility/nyc_group_c/nyc_source_files/landing
+
   timezone:
     default: America/New_York
+
   analysis_start_date:
     default: "2026-03-01"
   analysis_end_date:
     default: "2026-05-31"
+
   weather_source_url:
     default: https://archive-api.open-meteo.com/v1/archive
   green_taxi_base_url:
@@ -62,6 +68,7 @@ resources:
       photon: true
       development: false
       allow_duplicate_names: false
+
       configuration:
         nyc_mobility.catalog: ${var.catalog}
         nyc_mobility.landing_schema: ${var.landing_schema}
@@ -77,84 +84,11 @@ resources:
         nyc_mobility.weather_source_url: ${var.weather_source_url}
         nyc_mobility.green_taxi_base_url: ${var.green_taxi_base_url}
         nyc_mobility.taxi_zones_source_url: ${var.taxi_zones_source_url}
+
       libraries:
         - glob:
             include: ${workspace.file_path}/src/nyc_mobility/transformations/**
-      tags:
-        application: nyc-mobility
-        managed-by: bundle
 
-  jobs:
-    mobility_workflow:
-      name: nyc-mobility-workflow
-      description: >-
-        Idempotently prepares schemas, lands source files, and refreshes the
-        Bronze, Silver, and Gold Lakeflow graph.
-      max_concurrent_runs: 1
-      timeout_seconds: 14400
-      queue:
-        enabled: true
-      environments:
-        - environment_key: default
-          spec:
-            environment_version: "4"
-            dependencies:
-              - -r ${workspace.file_path}/requirements.txt
-      tasks:
-        - task_key: setup_environment
-          environment_key: default
-          timeout_seconds: 900
-          max_retries: 1
-          min_retry_interval_millis: 60000
-          retry_on_timeout: true
-          notebook_task:
-            notebook_path: ./notebooks/00_setup.py
-            base_parameters:
-              catalog: ${var.catalog}
-              landing_schema: ${var.landing_schema}
-              landing_volume: ${var.landing_volume}
-              landing_path_override: ${var.landing_path}
-              bronze_schema: ${var.bronze_schema}
-              silver_schema: ${var.silver_schema}
-              gold_schema: ${var.gold_schema}
-              quality_schema: ${var.quality_schema}
-
-        - task_key: land_raw_sources
-          depends_on:
-            - task_key: setup_environment
-          environment_key: default
-          timeout_seconds: 7200
-          max_retries: 3
-          min_retry_interval_millis: 120000
-          retry_on_timeout: true
-          notebook_task:
-            notebook_path: ./notebooks/01_land_raw_sources.py
-            base_parameters:
-              catalog: ${var.catalog}
-              landing_schema: ${var.landing_schema}
-              landing_volume: ${var.landing_volume}
-              landing_path_override: ${var.landing_path}
-              bronze_schema: ${var.bronze_schema}
-              silver_schema: ${var.silver_schema}
-              gold_schema: ${var.gold_schema}
-              quality_schema: ${var.quality_schema}
-              timezone: ${var.timezone}
-              analysis_start_date: ${var.analysis_start_date}
-              analysis_end_date: ${var.analysis_end_date}
-              weather_source_url: ${var.weather_source_url}
-              green_taxi_base_url: ${var.green_taxi_base_url}
-              taxi_zones_source_url: ${var.taxi_zones_source_url}
-
-        - task_key: refresh_medallion_pipeline
-          depends_on:
-            - task_key: land_raw_sources
-          timeout_seconds: 7200
-          max_retries: 1
-          min_retry_interval_millis: 300000
-          retry_on_timeout: true
-          pipeline_task:
-            pipeline_id: ${resources.pipelines.medallion_pipeline.id}
-            full_refresh: false
       tags:
         application: nyc-mobility
         managed-by: bundle
@@ -163,9 +97,12 @@ targets:
   development:
     mode: development
     default: true
+
     variables:
-      catalog: nyc_mobility
+      catalog: nyc_mobility_dev
+      landing_path: /Volumes/nyc_mobility/nyc_group_c/nyc_source_files/landing
       service_principal_name: unused-in-development
+
     resources:
       pipelines:
         medallion_pipeline:
@@ -173,18 +110,118 @@ targets:
 
   production:
     mode: production
+
+    variables:
+      catalog: nyc_mobility
+      landing_path: /Volumes/nyc_mobility/nyc_group_c/nyc_source_files/landing
+
     run_as:
       service_principal_name: ${var.service_principal_name}
+
     permissions:
       - level: CAN_MANAGE
         group_name: admins
+
     resources:
       pipelines:
         medallion_pipeline:
           development: false
+
       jobs:
-        mobility_workflow:
-          schedule:
-            quartz_cron_expression: "0 0 6 * * ?"
-            timezone_id: America/New_York
-            pause_status: PAUSED
+        ingest_raw_sources:
+          name: nyc-mobility-ingest-raw
+          description: >-
+            Validate the landing location and acquire source files.
+            Run this before refreshing the production pipeline.
+          max_concurrent_runs: 1
+          timeout_seconds: 9000
+
+          queue:
+            enabled: true
+
+          parameters:
+            - name: catalog
+              default: ${var.catalog}
+            - name: landing_schema
+              default: ${var.landing_schema}
+            - name: landing_volume
+              default: ${var.landing_volume}
+            - name: landing_path_override
+              default: ${var.landing_path}
+            - name: bronze_schema
+              default: ${var.bronze_schema}
+            - name: silver_schema
+              default: ${var.silver_schema}
+            - name: gold_schema
+              default: ${var.gold_schema}
+            - name: quality_schema
+              default: ${var.quality_schema}
+            - name: timezone
+              default: ${var.timezone}
+            - name: analysis_start_date
+              default: ${var.analysis_start_date}
+            - name: analysis_end_date
+              default: ${var.analysis_end_date}
+            - name: weather_source_url
+              default: ${var.weather_source_url}
+            - name: green_taxi_base_url
+              default: ${var.green_taxi_base_url}
+            - name: taxi_zones_source_url
+              default: ${var.taxi_zones_source_url}
+
+          environments:
+            - environment_key: default
+              spec:
+                environment_version: "4"
+                dependencies:
+                  - -r ${workspace.file_path}/requirements.txt
+
+          tasks:
+            - task_key: setup_environment
+              environment_key: default
+              timeout_seconds: 900
+              max_retries: 1
+              min_retry_interval_millis: 60000
+              retry_on_timeout: true
+              notebook_task:
+                notebook_path: ./notebooks/00_setup.py
+
+            - task_key: land_raw_sources
+              depends_on:
+                - task_key: setup_environment
+              environment_key: default
+              timeout_seconds: 7200
+              max_retries: 3
+              min_retry_interval_millis: 120000
+              retry_on_timeout: true
+              notebook_task:
+                notebook_path: ./notebooks/01_land_raw_sources.py
+
+          tags:
+            application: nyc-mobility
+            managed-by: bundle
+
+        refresh_medallion:
+          name: nyc-mobility-refresh-medallion
+          description: >-
+            Refresh production Bronze, Silver, and Gold using files
+            already present in the shared landing Volume.
+          max_concurrent_runs: 1
+          timeout_seconds: 7200
+
+          queue:
+            enabled: true
+
+          tasks:
+            - task_key: refresh_medallion_pipeline
+              timeout_seconds: 7200
+              max_retries: 1
+              min_retry_interval_millis: 300000
+              retry_on_timeout: true
+              pipeline_task:
+                pipeline_id: ${resources.pipelines.medallion_pipeline.id}
+                full_refresh: false
+
+          tags:
+            application: nyc-mobility
+            managed-by: bundle

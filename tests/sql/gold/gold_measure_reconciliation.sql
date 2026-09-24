@@ -1,9 +1,14 @@
--- Eligible Silver-to-Gold taxi measure reconciliation. Result must return PASS.
+-- Shared result contract: source, expected_rows, actual_rows, row_difference,
+-- fare_difference, total_difference, distance_difference, status.
+-- Gold stores fare and total as DECIMAL(12,2), so expected Silver measures use
+-- the same rounding before aggregate comparison. Null measures remain NULL.
 
 WITH eligible_silver AS (
     SELECT COUNT(*) AS row_count,
-           SUM(CAST(fare_amount AS DECIMAL(20, 4))) AS fare_amount,
-           SUM(CAST(total_amount AS DECIMAL(20, 4))) AS total_amount,
+           SUM(CAST(CAST(fare_amount AS DECIMAL(12, 2)) AS DECIMAL(20, 4)))
+               AS fare_amount,
+           SUM(CAST(CAST(total_amount AS DECIMAL(12, 2)) AS DECIMAL(20, 4)))
+               AS total_amount,
            SUM(CAST(trip_distance AS DECIMAL(20, 4))) AS trip_distance
     FROM nyc_mobility.nyc_silver.silver_green_taxi_trips
     WHERE is_in_analysis_window
@@ -19,7 +24,10 @@ gold AS (
            SUM(CAST(trip_distance AS DECIMAL(20, 4))) AS trip_distance
     FROM nyc_mobility.nyc_gold.fact_taxi_trip
 )
-SELECT s.row_count AS eligible_silver_rows, g.row_count AS gold_rows,
+SELECT 'green_taxi' AS source,
+       s.row_count AS expected_rows,
+       g.row_count AS actual_rows,
+       g.row_count - s.row_count AS row_difference,
        g.fare_amount - s.fare_amount AS fare_difference,
        g.total_amount - s.total_amount AS total_difference,
        g.trip_distance - s.trip_distance AS distance_difference,
