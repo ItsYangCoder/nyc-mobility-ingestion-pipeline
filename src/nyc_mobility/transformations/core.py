@@ -297,6 +297,7 @@ def build_silver_weather(
 
 def build_silver_taxi_zones(bronze: DataFrame) -> DataFrame:
     """Keep the latest Zone snapshot and emit one canonical row per location."""
+
     def clean_text(column_name: str):
         return F.trim(F.regexp_replace(F.col(column_name), r"\s+", " "))
 

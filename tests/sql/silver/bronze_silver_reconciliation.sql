@@ -41,7 +41,7 @@ weather_latest AS (
 latest_zone_snapshot AS (
     SELECT CAST(LocationID AS INT) AS location_id
     FROM nyc_mobility.nyc_bronze.bronze_taxi_zones_raw
-    WHERE _ingested_at = (
+    WHERE _ingested_at <=> (
         SELECT MAX(_ingested_at)
         FROM nyc_mobility.nyc_bronze.bronze_taxi_zones_raw
     )
